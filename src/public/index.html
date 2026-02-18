@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KOSHA 언론모니터링 시스템 | 한국산업안전보건공단</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+
+<!-- ── 헤더 ─────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-inner">
+    <div class="header-logo">
+      <div class="logo-badge">
+        <i class="fa-solid fa-shield-halved"></i>
+      </div>
+      <div class="logo-text">
+        <span class="logo-main">KOSHA 언론모니터링</span>
+        <span class="logo-sub">한국산업안전보건공단</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="update-badge" id="updateBadge">
+        <span class="update-dot"></span>
+        <span id="lastUpdateTime">업데이트 중...</span>
+      </div>
+      <button class="btn-crawl" id="btnManualCrawl" title="수동 업데이트">
+        <i class="fa-solid fa-rotate"></i>
+        <span>지금 업데이트</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ── 메인 레이아웃 ──────────────────────────────────────── -->
+<div class="layout">
+
+  <!-- 사이드바 -->
+  <aside class="sidebar" id="sidebar">
+    <!-- 통계 카드 -->
+    <div class="stat-cards">
+      <div class="stat-card total">
+        <div class="stat-icon"><i class="fa-solid fa-newspaper"></i></div>
+        <div class="stat-info">
+          <span class="stat-label">전체 기사</span>
+          <span class="stat-value" id="statTotal">-</span>
+        </div>
+      </div>
+      <div class="stat-card today">
+        <div class="stat-icon"><i class="fa-solid fa-calendar-day"></i></div>
+        <div class="stat-info">
+          <span class="stat-label">오늘 수집</span>
+          <span class="stat-value" id="statToday">-</span>
+        </div>
+      </div>
+      <div class="stat-card hour">
+        <div class="stat-icon"><i class="fa-solid fa-clock"></i></div>
+        <div class="stat-info">
+          <span class="stat-label">최근 1시간</span>
+          <span class="stat-value" id="statHour">-</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 검색 패널 -->
+    <div class="search-panel">
+      <div class="search-panel-title">
+        <i class="fa-solid fa-magnifying-glass"></i> 통합 검색
+      </div>
+
+      <!-- 키워드 검색 -->
+      <div class="search-input-wrap">
+        <input type="text" id="searchQuery" placeholder="검색어 입력 (제목, 내용, 키워드)" autocomplete="off" />
+        <button id="btnSearch"><i class="fa-solid fa-search"></i></button>
+      </div>
+
+      <!-- 카테고리 필터 -->
+      <div class="filter-section">
+        <label class="filter-label">카테고리</label>
+        <select id="filterCategory">
+          <option value="all">전체 카테고리</option>
+          <option value="중대재해">중대재해</option>
+          <option value="산업재해">산업재해</option>
+          <option value="법령·제도">법령·제도</option>
+          <option value="정책">정책</option>
+          <option value="화학안전">화학안전</option>
+          <option value="직업보건">직업보건</option>
+          <option value="안전보건">안전보건</option>
+          <option value="기관동향">기관동향</option>
+          <option value="기타">기타</option>
+        </select>
+      </div>
+
+      <!-- 출처 필터 -->
+      <div class="filter-section">
+        <label class="filter-label">출처</label>
+        <select id="filterSource">
+          <option value="all">전체 출처</option>
+        </select>
+      </div>
+
+      <!-- 날짜 필터 -->
+      <div class="filter-section date-filter">
+        <label class="filter-label">
+          <i class="fa-solid fa-calendar"></i> 기간 검색
+        </label>
+        <div class="date-tabs">
+          <button class="date-tab active" data-tab="range">기간</button>
+          <button class="date-tab" data-tab="year">연도</button>
+          <button class="date-tab" data-tab="month">월</button>
+          <button class="date-tab" data-tab="day">날짜</button>
+          <button class="date-tab" data-tab="hour">시간</button>
+        </div>
+
+        <!-- 기간 탭 -->
+        <div class="date-tab-content active" id="tab-range">
+          <input type="date" id="dateFrom" placeholder="시작일" />
+          <span class="date-separator">~</span>
+          <input type="date" id="dateTo" placeholder="종료일" />
+        </div>
+
+        <!-- 연도 탭 -->
+        <div class="date-tab-content" id="tab-year">
+          <select id="filterYear">
+            <option value="">연도 선택</option>
+          </select>
+        </div>
+
+        <!-- 월 탭 -->
+        <div class="date-tab-content" id="tab-month">
+          <select id="filterMonthYear">
+            <option value="">연도 선택</option>
+          </select>
+          <select id="filterMonth">
+            <option value="">월 선택</option>
+            <option value="1">1월</option><option value="2">2월</option>
+            <option value="3">3월</option><option value="4">4월</option>
+            <option value="5">5월</option><option value="6">6월</option>
+            <option value="7">7월</option><option value="8">8월</option>
+            <option value="9">9월</option><option value="10">10월</option>
+            <option value="11">11월</option><option value="12">12월</option>
+          </select>
+        </div>
+
+        <!-- 날짜 탭 -->
+        <div class="date-tab-content" id="tab-day">
+          <input type="date" id="filterDay" />
+        </div>
+
+        <!-- 시간 탭 -->
+        <div class="date-tab-content" id="tab-hour">
+          <input type="date" id="filterHourDate" />
+          <select id="filterHour">
+            <option value="">시간 선택</option>
+            <option value="0">00시</option><option value="1">01시</option>
+            <option value="2">02시</option><option value="3">03시</option>
+            <option value="4">04시</option><option value="5">05시</option>
+            <option value="6">06시</option><option value="7">07시</option>
+            <option value="8">08시</option><option value="9">09시</option>
+            <option value="10">10시</option><option value="11">11시</option>
+            <option value="12">12시</option><option value="13">13시</option>
+            <option value="14">14시</option><option value="15">15시</option>
+            <option value="16">16시</option><option value="17">17시</option>
+            <option value="18">18시</option><option value="19">19시</option>
+            <option value="20">20시</option><option value="21">21시</option>
+            <option value="22">22시</option><option value="23">23시</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="search-buttons">
+        <button class="btn-search-primary" id="btnApplySearch">
+          <i class="fa-solid fa-search"></i> 검색
+        </button>
+        <button class="btn-reset" id="btnReset">
+          <i class="fa-solid fa-xmark"></i> 초기화
+        </button>
+      </div>
+    </div>
+
+    <!-- 카테고리 현황 -->
+    <div class="category-panel">
+      <div class="panel-title">
+        <i class="fa-solid fa-chart-pie"></i> 카테고리 현황
+      </div>
+      <ul class="category-list" id="categoryList">
+        <li class="loading-item"><i class="fa-solid fa-spinner fa-spin"></i> 로딩 중...</li>
+      </ul>
+    </div>
+
+    <!-- 크롤링 로그 -->
+    <div class="crawl-status-panel">
+      <div class="panel-title">
+        <i class="fa-solid fa-server"></i> 수집 현황
+      </div>
+      <div class="crawl-info" id="crawlInfo">
+        <div class="crawl-row">
+          <span>상태</span>
+          <span class="crawl-status-badge idle" id="crawlStatusBadge">대기 중</span>
+        </div>
+        <div class="crawl-row">
+          <span>마지막 수집</span>
+          <span id="crawlLastTime">-</span>
+        </div>
+        <div class="crawl-row">
+          <span>다음 수집</span>
+          <span id="crawlNextTime">-</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 메인 콘텐츠 -->
+  <main class="main-content">
+
+    <!-- 상단 탭 네비게이션 -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="latest">
+        <i class="fa-solid fa-fire"></i> 최신 뉴스
+      </button>
+      <button class="tab-btn" data-tab="search-result" id="tabSearchResult" style="display:none">
+        <i class="fa-solid fa-search"></i> 검색 결과
+        <span class="result-count" id="resultCount">0</span>
+      </button>
+      <button class="tab-btn" data-tab="law">
+        <i class="fa-solid fa-scale-balanced"></i> 법령·제도
+      </button>
+      <button class="tab-btn" data-tab="policy">
+        <i class="fa-solid fa-landmark"></i> 정책·브리핑
+      </button>
+      <button class="tab-btn" data-tab="disaster">
+        <i class="fa-solid fa-triangle-exclamation"></i> 중대재해
+      </button>
+    </nav>
+
+    <!-- 결과 정렬 & 정보 바 -->
+    <div class="result-bar">
+      <div class="result-info" id="resultInfo">전체 기사 로딩 중...</div>
+      <div class="sort-wrap">
+        <label>정렬</label>
+        <select id="sortOrder">
+          <option value="latest">최신순</option>
+          <option value="oldest">오래된순</option>
+        </select>
+        <select id="pageSize">
+          <option value="20">20개</option>
+          <option value="30">30개</option>
+          <option value="50">50개</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 뉴스 피드 -->
+    <div class="news-feed" id="newsFeed">
+      <div class="loading-spinner">
+        <i class="fa-solid fa-spinner fa-spin"></i>
+        <p>데이터를 불러오는 중입니다...</p>
+      </div>
+    </div>
+
+    <!-- 페이지네이션 -->
+    <div class="pagination" id="pagination"></div>
+
+  </main>
+</div>
+
+<!-- ── 기사 상세 모달 ──────────────────────────────────────── -->
+<div class="modal-overlay" id="articleModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <div class="modal-meta">
+        <span class="modal-category" id="modalCategory">-</span>
+        <span class="modal-source" id="modalSource">-</span>
+        <span class="modal-date" id="modalDate">-</span>
+      </div>
+      <button class="modal-close" id="modalClose"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <h2 class="modal-title" id="modalTitle">-</h2>
+      <div class="modal-content-text" id="modalContent">-</div>
+      <div class="modal-actions">
+        <a href="#" target="_blank" class="btn-original" id="modalLink">
+          <i class="fa-solid fa-external-link"></i> 원문 보기
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 알림 토스트 -->
+<div class="toast" id="toast"></div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
