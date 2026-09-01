@@ -3,6 +3,7 @@
  */
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const {
   searchArticles,
   getLatestArticles,
@@ -17,6 +18,213 @@ const {
 } = require('../models/database');
 const { runAllCrawlers, getStatus: getSchedulerStatus } = require('../crawlers/scheduler');
 
+// ─── 콘텐츠 프록시 헬퍼 ─────────────────────────────────────────
+const PROXY_ALLOWED = ['moel.go.kr', 'kosha.or.kr', 'law.go.kr', 'korea.kr', 'me.go.kr'];
+const PROXY_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+  'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Accept-Encoding': 'gzip, deflate',
+  'Cache-Control': 'no-cache',
+  'Connection': 'keep-alive',
+};
+
+async function fetchHtml(url) {
+  const response = await axios.get(url, {
+    timeout: 12000,
+    headers: { ...PROXY_HEADERS, 'Referer': new URL(url).origin },
+    maxRedirects: 5,
+    responseType: 'arraybuffer',
+  });
+  const contentType = response.headers['content-type'] || '';
+  let html = '';
+  try {
+    const iconv = require('iconv-lite');
+    const buf = Buffer.from(response.data);
+    if (contentType.includes('euc-kr') || contentType.includes('ks_c_5601') || contentType.includes('euc_kr')) {
+      html = iconv.decode(buf, 'EUC-KR');
+    } else {
+      html = buf.toString('utf-8');
+      if (html.substring(0, 2000).toLowerCase().includes('euc-kr') || html.substring(0, 2000).toLowerCase().includes('ks_c_5601')) {
+        html = iconv.decode(buf, 'EUC-KR');
+      }
+    }
+  } catch {
+    html = Buffer.from(response.data).toString('utf-8');
+  }
+  return { html, contentType, headers: response.headers };
+}
+
+function extractTextContent(html) {
+  // SPA 감지 (Vue/React 앱: 빈 div#app)
+  const isSPA = /<div[^>]*id="app"[^>]*>\s*<\/div>/i.test(html);
+  if (isSPA) return '';
+
+  // 스크립트·스타일·네비·푸터 제거
+  let text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+    .replace(/<header[\s\S]*?<\/header>/gi, '')
+    .replace(/<!\-\-[\s\S]*?\-\->/g, '');
+
+  // 본문 영역 추출 시도 (다양한 패턴)
+  const bodyPatterns = [
+    /<(?:div|article|section)[^>]*(?:class|id)="[^"]*(?:view_cont|boardView|view-content|artcl-txt|article-body|news_content|cont_area|detail-content)[^"]*"[^>]*>([\s\S]{100,}?)(?=<\/(?:div|article|section)>)/i,
+    /<(?:div|article|section|main)[^>]*(?:class|id)="[^"]*(?:content|view|article|body|detail|main|board)[^"]*"[^>]*>([\s\S]{200,}?)(?=<\/(?:div|article|section|main)>)/i,
+  ];
+  for (const pat of bodyPatterns) {
+    const m = text.match(pat);
+    if (m) { text = m[1]; break; }
+  }
+
+  // HTML 태그 제거 후 정리
+  return text
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#\d+;/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .substring(0, 3000);
+}
+
+function extractAttachments(html, baseUrl) {
+  const attachments = [];
+  // href에서 다운로드 가능한 파일 링크 추출
+  const linkRe = /href="([^"]*\.(?:pdf|hwp|hwpx|doc|docx|xls|xlsx|ppt|pptx|zip|csv|txt|xml)(?:\?[^"]*)?)"[^>]*>([^<]*)/gi;
+  let m;
+  while ((m = linkRe.exec(html)) !== null) {
+    let href = m[1];
+    const label = m[2].trim().replace(/&nbsp;/g, '').trim() || href.split('/').pop().split('?')[0];
+    if (!href.startsWith('http')) {
+      href = href.startsWith('/') ? baseUrl + href : baseUrl + '/' + href;
+    }
+    if (!attachments.find(a => a.href === href)) {
+      attachments.push({ href, label: label || '첨부파일' });
+    }
+    if (attachments.length >= 10) break;
+  }
+  // JavaScript 다운로드 링크도 추출 (onclick 패턴)
+  const jsRe = /(?:fn_egov_download_file|fileDown|downFile|downloadFile)\(['"](\/[^'"]+)['"]/gi;
+  while ((m = jsRe.exec(html)) !== null) {
+    const href = baseUrl + m[1];
+    if (!attachments.find(a => a.href === href)) {
+      attachments.push({ href, label: '첨부파일 다운로드' });
+    }
+    if (attachments.length >= 10) break;
+  }
+  return attachments;
+}
+
+// ─── 콘텐츠 추출 API (JSON 반환, 드로어 내 렌더링용) ──────────────
+// GET /api/proxy/extract?url=https://...
+router.get('/proxy/extract', async (req, res) => {
+  const { url } = req.query;
+  if (!url || !url.startsWith('http')) {
+    return res.status(400).json({ success: false, error: '유효하지 않은 URL' });
+  }
+  if (!PROXY_ALLOWED.some(d => url.includes(d))) {
+    return res.status(403).json({ success: false, error: '허용되지 않은 도메인' });
+  }
+
+  try {
+    const { html } = await fetchHtml(url);
+    const baseUrl = new URL(url).origin;
+    const textContent = extractTextContent(html);
+    const attachments = extractAttachments(html, baseUrl);
+
+    // SPA 감지 여부 반환
+    const isSPA = /<div[^>]*id="app"[^>]*>\s*<\/div>/i.test(html);
+
+    res.json({
+      success: true,
+      text: textContent,
+      attachments,
+      directUrl: url,
+      isSPA,
+    });
+  } catch (err) {
+    console.error('[프록시 추출] 오류:', err.message, url);
+    res.json({
+      success: false,
+      error: err.message,
+      directUrl: url,
+      text: '',
+      attachments: [],
+    });
+  }
+});
+
+// ─── 콘텐츠 프록시 (정부기관 사이트 내용 미리보기 - iframe용) ──────
+// GET /api/proxy/content?url=https://...
+router.get('/proxy/content', async (req, res) => {
+  const { url } = req.query;
+  if (!url || !url.startsWith('http')) {
+    return res.status(400).json({ success: false, error: '유효하지 않은 URL' });
+  }
+  if (!PROXY_ALLOWED.some(d => url.includes(d))) {
+    return res.status(403).json({ success: false, error: '허용되지 않은 도메인' });
+  }
+
+  const siteName = url.includes('moel.go.kr') ? '고용노동부' : url.includes('kosha.or.kr') ? '안전보건공단' : '정부기관';
+  const domain = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+
+  try {
+    const { html: rawHtml } = await fetchHtml(url);
+    const baseUrl = new URL(url).origin;
+
+    // 상대경로 → 절대경로 변환
+    let html = rawHtml
+      .replace(/href="\/([^"]*?)"/g, `href="${baseUrl}/$1"`)
+      .replace(/src="\/([^"]*?)"/g, `src="${baseUrl}/$1"`)
+      .replace(/action="\/([^"]*?)"/g, `action="${baseUrl}/$1"`);
+
+    res.set({
+      'Content-Type': 'text/html; charset=utf-8',
+      'X-Frame-Options': 'ALLOWALL',
+      'Content-Security-Policy': "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;",
+      'Cache-Control': 'public, max-age=300',
+    });
+    res.send(html);
+  } catch (err) {
+    console.error('[프록시] 오류:', err.message, url);
+    // 오류 시 안내 페이지 반환
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{font-family:'Pretendard Variable',system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f8fafc;color:#1e293b;text-align:center;padding:20px;}
+  .box{background:#fff;border-radius:16px;padding:36px 32px;box-shadow:0 4px 24px rgba(0,0,0,.1);max-width:480px;width:100%;}
+  .icon{font-size:40px;margin-bottom:14px;}
+  h2{font-size:17px;font-weight:700;margin:0 0 10px;}
+  p{font-size:13px;color:#64748b;line-height:1.7;margin:0 0 18px;}
+  .hint{font-size:11.5px;color:#94a3b8;background:#f1f5f9;padding:10px 14px;border-radius:8px;margin-bottom:18px;line-height:1.6;}
+  .btns{display:flex;flex-direction:column;gap:8px;}
+  a.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;}
+  a.btn-primary{background:#1e4068;color:#fff;}
+  a.btn-primary:hover{background:#0d1e35;}
+  a.btn-secondary{background:#f1f5f9;color:#334155;border:1px solid #e2e8f0;}
+  a.btn-secondary:hover{background:#e2e8f0;}
+</style></head><body>
+<div class="box">
+  <div class="icon">🏛️</div>
+  <h2>${siteName} 미리보기 오류</h2>
+  <p>${domain} 사이트의 보안 정책으로 인해 직접 미리보기가 불가합니다.<br>아래 버튼으로 공식 사이트에서 원문을 확인하세요.</p>
+  <div class="hint">💡 오류: ${err.message || '접근 제한'}</div>
+  <div class="btns">
+    <a href="${url}" target="_blank" class="btn btn-primary">↗ ${siteName} 공식 사이트에서 열기</a>
+    <a href="javascript:window.parent.postMessage('gov-viewer-close','*')" class="btn btn-secondary">✕ 닫기</a>
+  </div>
+</div>
+</body></html>`);
+  }
+});
+
 // ─── 뉴스 목록 & 검색 ───────────────────────────────────────
 // GET /api/articles?query=&category=&source=&dateFrom=&dateTo=&page=&limit=
 router.get('/articles', (req, res) => {
@@ -27,8 +235,11 @@ router.get('/articles', (req, res) => {
       source,
       dateFrom,
       dateTo,
+      crawledFrom,  // 수집일시 기반 필터 시작 (UTC)
+      crawledTo,    // 수집일시 기반 필터 종료 (UTC)
       page = 1,
       limit = 20,
+      sort = 'latest',
       dateHour, // 특정 시간대 필터
       dateYear, // 연도 필터
       dateMonth, // 월 필터
@@ -65,8 +276,11 @@ router.get('/articles', (req, res) => {
       source,
       dateFrom: adjustedDateFrom,
       dateTo: adjustedDateTo,
+      crawledFrom,
+      crawledTo,
       page: parseInt(page),
       limit: Math.min(parseInt(limit), 100),
+      sort,
     });
 
     res.json({
@@ -88,6 +302,18 @@ router.get('/articles/latest', (req, res) => {
     res.json({ success: true, data: articles, count: articles.length });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/articles/bookmarked  (북마크된 기사 목록) ← :id보다 먼저 등록
+router.get('/articles/bookmarked', (req, res) => {
+  try {
+    const rows = db.prepare(
+      `SELECT * FROM articles WHERE is_bookmarked = 1 ORDER BY published_at DESC LIMIT 100`
+    ).all();
+    res.json({ success: true, data: rows, total: rows.length });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
@@ -152,8 +378,8 @@ router.get('/stats/hourly', (req, res) => {
 });
 
 // ─── 크롤링 관리 ───────────────────────────────────────────
-// POST /api/crawl/run - 수동 크롤링 실행
-router.post('/crawl/run', async (req, res) => {
+// GET·POST /api/crawl/run - 수동 크롤링 실행 (apiFetch는 GET, fetch POST 양쪽 지원)
+router.all('/crawl/run', async (req, res) => {
   try {
     const schedulerStatus = getSchedulerStatus();
     if (schedulerStatus.isRunning) {
@@ -224,6 +450,72 @@ router.get('/filters', (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─── 키워드 트렌드 ─────────────────────────────────────────
+// GET /api/stats/keywords?days=7&limit=8
+router.get('/stats/keywords', (req, res) => {
+  try {
+    const days  = Math.min(parseInt(req.query.days)  || 7,  30);
+    const limit = Math.min(parseInt(req.query.limit) || 8,  20);
+    const rows = db.prepare(`
+      SELECT kw, COUNT(*) as cnt
+      FROM (
+        SELECT trim(value) as kw
+        FROM articles, json_each('["' || replace(replace(keywords,', ',','),',','","') || '"]')
+        WHERE published_at >= datetime('now', ? || ' days')
+          AND keywords IS NOT NULL AND keywords != ''
+      )
+      WHERE length(kw) >= 2
+      GROUP BY kw ORDER BY cnt DESC LIMIT ?
+    `).all(`-${days}`, limit);
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ─── 시간대별 수집 분포 (오늘) ──────────────────────────────
+// GET /api/stats/hourly-today  (오늘 0-23시 crawled_at 기준, KST 변환)
+router.get('/stats/hourly-today', (req, res) => {
+  try {
+    // crawled_at은 UTC 저장 → KST 오늘 범위의 UTC 값 계산
+    const nowUTC = new Date();
+    const kstNow = new Date(nowUTC.getTime() + 9 * 3600 * 1000);
+    const kstMidnight = new Date(Date.UTC(
+      kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate(), 0, 0, 0
+    ));
+    const startUTC = new Date(kstMidnight.getTime() - 9 * 3600 * 1000);
+    const endUTC   = new Date(startUTC.getTime() + 86400 * 1000 - 1);
+    const fmt = d => d.toISOString().replace('T', ' ').substring(0, 19);
+
+    const rows = db.prepare(`
+      SELECT CAST(strftime('%H', datetime(crawled_at, '+9 hours')) AS INTEGER) as hour, COUNT(*) as cnt
+      FROM articles
+      WHERE crawled_at >= ? AND crawled_at <= ?
+      GROUP BY hour ORDER BY hour
+    `).all(fmt(startUTC), fmt(endUTC));
+
+    const map = {};
+    rows.forEach(r => { map[r.hour] = r.cnt; });
+    const data = Array.from({ length: 24 }, (_, h) => ({ hour: h, cnt: map[h] || 0 }));
+    const kstDate = kstNow.toISOString().substring(0, 10);
+    res.json({ success: true, data, kstDate });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ─── 북마크 ────────────────────────────────────────────────
+// POST /api/articles/:id/bookmark  { bookmarked: true|false }
+router.post('/articles/:id/bookmark', (req, res) => {
+  try {
+    const val = req.body?.bookmarked ? 1 : 0;
+    db.prepare('UPDATE articles SET is_bookmarked = ? WHERE id = ?').run(val, req.params.id);
+    res.json({ success: true, bookmarked: !!val });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 

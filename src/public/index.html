@@ -2,159 +2,298 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KOSHA 언론모니터링 시스템 | 한국산업안전보건공단</title>
+  <!-- 모바일 최적화: 스케일 고정, iOS 사파리 인네이블 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <!-- iOS 사파리 + 홈화면 쫐가 지원 -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="KOSHA 모니터링" />
+  <!-- Android Chrome 테마컴러 -->
+  <meta name="theme-color" content="#0a1628" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <!-- 터치 스크롤 최적화: IE/Edge tap highlight 제거 -->
+  <meta name="msapplication-tap-highlight" content="no" />
+  <!-- 테마 컴러 (Windows Phone) -->
+  <meta name="msapplication-TileColor" content="#0a1628" />
+  <title>KOSHA 언론모니터링 | 한국산업안전보건공단</title>
+  <meta name="description" content="한국산업안전보건공단 산업안전보건 관련 뉴스·법령·정책 모니터링 시스템" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="stylesheet"
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" />
   <link rel="stylesheet" href="/css/style.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 </head>
 <body>
 
-<!-- ── 헤더 ─────────────────────────────────────────────── -->
-<header class="header">
-  <div class="header-inner">
-    <div class="header-logo">
-      <div class="logo-badge">
-        <i class="fa-solid fa-shield-halved"></i>
+<!-- ── 속보 티커 배너 ────────────────────────────────────────── -->
+<div class="ticker-wrap" id="tickerWrap">
+  <div class="ticker-label"><i class="ti ti-speakerphone"></i> 속보</div>
+  <div class="ticker-track" id="tickerTrack">
+    <span class="ticker-item">최신 기사를 불러오는 중...</span>
+  </div>
+  <button class="ticker-close" id="tickerClose" title="속보 숨기기"><i class="ti ti-chevron-up"></i></button>
+</div>
+<!-- 속보 재표시 플로팅 버튼 (숨긴 상태에서 표시) -->
+<button class="ticker-toggle-btn" id="tickerToggleBtn" title="속보 보기">
+  <i class="ti ti-speakerphone"></i> 속보
+</button>
+
+<!-- ── 상단 탑바 ────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <!-- 햄버거(모바일) -->
+    <button class="hamburger" id="hamburger" aria-label="메뉴 열기">
+      <span></span><span></span><span></span>
+    </button>
+    <!-- 브랜드 -->
+    <div class="topbar-brand">
+      <div class="brand-icon">
+        <img src="/images/kosha-logo.png" alt="KOSHA" class="brand-logo-img" />
       </div>
-      <div class="logo-text">
-        <span class="logo-main">KOSHA 언론모니터링</span>
-        <span class="logo-sub">한국산업안전보건공단</span>
+      <div class="brand-text">
+        <span class="brand-name">KOSHA 모니터링</span>
+        <span class="brand-sub">한국산업안전보건공단</span>
       </div>
     </div>
-    <div class="header-right">
-      <div class="update-badge" id="updateBadge">
-        <span class="update-dot"></span>
-        <span id="lastUpdateTime">업데이트 중...</span>
+    <!-- 중앙: 글로벌 검색 -->
+    <div class="topbar-center">
+      <div class="global-search" id="globalSearchWrap">
+        <i class="ti ti-search"></i>
+        <input type="text" id="globalSearch" placeholder="키워드로 검색 (Enter)" autocomplete="off" />
+        <kbd>↵</kbd>
+        <!-- 자동완성 드롭다운 -->
+        <div class="search-suggest" id="searchSuggest"></div>
       </div>
-      <button class="btn-crawl" id="btnManualCrawl" title="수동 업데이트">
-        <i class="fa-solid fa-rotate"></i>
+    </div>
+    <!-- 오른쪽 -->
+    <div class="topbar-right">
+      <div class="live-pill" id="livePill">
+        <span class="live-dot"></span>
+        <span id="liveText">실시간 모니터링</span>
+      </div>
+      <button class="btn-crawl" id="btnCrawl">
+        <i class="ti ti-refresh"></i>
         <span>지금 업데이트</span>
       </button>
     </div>
   </div>
 </header>
 
-<!-- ── 메인 레이아웃 ──────────────────────────────────────── -->
-<div class="layout">
+<!-- 사이드바 오버레이(모바일) -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- ── 앱 레이아웃 ──────────────────────────────────────────── -->
+<div class="app-shell">
 
   <!-- 사이드바 -->
-  <aside class="sidebar" id="sidebar">
-    <!-- 통계 카드 -->
-    <div class="stat-cards">
-      <div class="stat-card total">
-        <div class="stat-icon"><i class="fa-solid fa-newspaper"></i></div>
-        <div class="stat-info">
-          <span class="stat-label">전체 기사</span>
-          <span class="stat-value" id="statTotal">-</span>
+  <nav class="sidebar" id="sidebar">
+
+    <!-- 수집 현황 -->
+    <div class="sb-section">
+      <p class="sb-label">수집 현황</p>
+      <div class="sb-stats">
+        <div class="sb-stat">
+          <div class="sb-stat-val" id="statTotal">—</div>
+          <div class="sb-stat-label">전체 기사</div>
+        </div>
+        <div class="sb-stat">
+          <div class="sb-stat-val accent" id="statToday">—</div>
+          <div class="sb-stat-label">오늘 수집</div>
+        </div>
+        <div class="sb-stat">
+          <div class="sb-stat-val green" id="statHour">—</div>
+          <div class="sb-stat-label">최근 1시간</div>
+        </div>
+        <div class="sb-stat">
+          <div class="sb-stat-val" id="statYesterday">—</div>
+          <div class="sb-stat-label">어제 수집</div>
         </div>
       </div>
-      <div class="stat-card today">
-        <div class="stat-icon"><i class="fa-solid fa-calendar-day"></i></div>
-        <div class="stat-info">
-          <span class="stat-label">오늘 수집</span>
-          <span class="stat-value" id="statToday">-</span>
-        </div>
+      <div class="next-update-row">
+        <span class="next-update-label">다음 업데이트</span>
+        <span class="next-update-val" id="nextUpdate">—</span>
       </div>
-      <div class="stat-card hour">
-        <div class="stat-icon"><i class="fa-solid fa-clock"></i></div>
-        <div class="stat-info">
-          <span class="stat-label">최근 1시간</span>
-          <span class="stat-value" id="statHour">-</span>
-        </div>
+      <!-- 모바일 전용 업데이트 버튼 (≤900px에서만 표시) -->
+      <button class="btn-crawl-mobile" id="btnCrawlMobile" aria-label="지금 업데이트">
+        <i class="ti ti-refresh"></i>
+        <span>지금 업데이트</span>
+      </button>
+    </div>
+
+    <!-- 시간대별 미니 스파크라인 -->
+    <div class="sb-section">
+      <p class="sb-label">오늘 시간대별 수집</p>
+      <div class="sparkline-wrap" id="sparklineWrap">
+        <canvas id="sparklineCanvas" width="190" height="36"></canvas>
+        <div class="sparkline-hint" id="sparklineHint"></div>
       </div>
     </div>
 
-    <!-- 검색 패널 -->
-    <div class="search-panel">
-      <div class="search-panel-title">
-        <i class="fa-solid fa-magnifying-glass"></i> 통합 검색
-      </div>
+    <!-- 메뉴 탭 -->
+    <div class="sb-section">
+      <p class="sb-label">분류</p>
+      <ul class="nav-menu">
+        <li class="nav-item active" data-tab="latest">
+          <i class="ti ti-layout-list"></i>
+          <span>전체 최신</span>
+          <span class="nav-badge" id="navBadgeLatest"></span>
+        </li>
+        <li class="nav-item" data-tab="disaster">
+          <i class="ti ti-alert-triangle"></i>
+          <span>중대재해</span>
+          <span class="nav-badge" id="navBadgeDisaster"></span>
+        </li>
+        <li class="nav-item" data-tab="safety">
+          <i class="ti ti-helmet"></i>
+          <span>산업재해·안전</span>
+          <span class="nav-badge" id="navBadgeSafety"></span>
+        </li>
+        <li class="nav-item" data-tab="law">
+          <i class="ti ti-scale"></i>
+          <span>법령·제도</span>
+          <span class="nav-badge" id="navBadgeLaw"></span>
+        </li>
+        <li class="nav-item" data-tab="policy">
+          <i class="ti ti-building-bank"></i>
+          <span>정책·브리핑</span>
+          <span class="nav-badge" id="navBadgePolicy"></span>
+        </li>
+        <li class="nav-item" data-tab="health">
+          <i class="ti ti-stethoscope"></i>
+          <span>직업보건·화학</span>
+          <span class="nav-badge" id="navBadgeHealth"></span>
+        </li>
+        <li class="nav-item" data-tab="kosha">
+          <i class="ti ti-certificate"></i>
+          <span>기관 동향</span>
+          <span class="nav-badge" id="navBadgeKosha"></span>
+        </li>
+        <li class="nav-item" data-tab="bookmarks">
+          <i class="ti ti-bookmark"></i>
+          <span>북마크</span>
+          <span class="nav-badge" id="navBadgeBookmarks"></span>
+        </li>
+      </ul>
+    </div>
 
-      <!-- 키워드 검색 -->
-      <div class="search-input-wrap">
-        <input type="text" id="searchQuery" placeholder="검색어 입력 (제목, 내용, 키워드)" autocomplete="off" />
-        <button id="btnSearch"><i class="fa-solid fa-search"></i></button>
+    <!-- 키워드 트렌드 -->
+    <div class="sb-section">
+      <p class="sb-label">키워드 트렌드 <span class="sb-label-sub">최근 7일</span></p>
+      <div class="kw-trend" id="kwTrend">
+        <div class="kw-trend-loading"><i class="ti ti-loader spin-i"></i></div>
       </div>
+    </div>
 
-      <!-- 카테고리 필터 -->
-      <div class="filter-section">
-        <label class="filter-label">카테고리</label>
-        <select id="filterCategory">
-          <option value="all">전체 카테고리</option>
-          <option value="중대재해">중대재해</option>
-          <option value="산업재해">산업재해</option>
-          <option value="법령·제도">법령·제도</option>
-          <option value="정책">정책</option>
-          <option value="화학안전">화학안전</option>
-          <option value="직업보건">직업보건</option>
-          <option value="안전보건">안전보건</option>
-          <option value="기관동향">기관동향</option>
-          <option value="기타">기타</option>
-        </select>
-      </div>
+    <!-- 카테고리별 카운트 -->
+    <div class="sb-section">
+      <p class="sb-label">카테고리별 수집 현황</p>
+      <ul class="cat-list" id="catList"></ul>
+    </div>
 
-      <!-- 출처 필터 -->
-      <div class="filter-section">
-        <label class="filter-label">출처</label>
-        <select id="filterSource">
-          <option value="all">전체 출처</option>
-        </select>
-      </div>
+    <!-- 출처별 수집 현황 -->
+    <div class="sb-section">
+      <p class="sb-label">출처별 수집</p>
+      <div class="crawl-status" id="crawlStatus"></div>
+    </div>
 
-      <!-- 날짜 필터 -->
-      <div class="filter-section date-filter">
-        <label class="filter-label">
-          <i class="fa-solid fa-calendar"></i> 기간 검색
-        </label>
-        <div class="date-tabs">
-          <button class="date-tab active" data-tab="range">기간</button>
-          <button class="date-tab" data-tab="year">연도</button>
-          <button class="date-tab" data-tab="month">월</button>
-          <button class="date-tab" data-tab="day">날짜</button>
-          <button class="date-tab" data-tab="hour">시간</button>
+  </nav>
+
+  <!-- 콘텐츠 메인 -->
+  <main class="content-area">
+
+    <!-- 필터 바 -->
+    <div class="filter-bar">
+      <div class="filter-bar-inner">
+        <div class="quick-chips">
+          <button class="chip active" id="chipAll">전체</button>
+          <button class="chip" id="chipToday">오늘</button>
+          <button class="chip" id="chipWeek">이번주</button>
+          <button class="chip" id="chipMonth">이번달</button>
         </div>
-
-        <!-- 기간 탭 -->
-        <div class="date-tab-content active" id="tab-range">
-          <input type="date" id="dateFrom" placeholder="시작일" />
-          <span class="date-separator">~</span>
-          <input type="date" id="dateTo" placeholder="종료일" />
-        </div>
-
-        <!-- 연도 탭 -->
-        <div class="date-tab-content" id="tab-year">
-          <select id="filterYear">
-            <option value="">연도 선택</option>
+        <div class="filter-divider"></div>
+        <div class="filter-selects">
+          <select id="selCategory" class="filter-select">
+            <option value="all">전체 카테고리</option>
+            <option value="중대재해">중대재해</option>
+            <option value="산업재해·안전">산업재해·안전</option>
+            <option value="법령·제도">법령·제도</option>
+            <option value="정책·브리핑">정책·브리핑</option>
+            <option value="직업보건·화학">직업보건·화학</option>
+            <option value="기관동향">기관동향</option>
+          </select>
+          <select id="selSource" class="filter-select">
+            <option value="all">전체 출처</option>
           </select>
         </div>
+        <div class="date-wrap">
+          <i class="ti ti-calendar" style="font-size:13px;color:var(--gray-400)"></i>
+          <input type="text" id="dateFrom" class="date-input" placeholder="YYYY-MM-DD"
+            pattern="\d{4}-\d{2}-\d{2}" maxlength="10"
+            onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" />
+          <span style="color:var(--gray-300)">—</span>
+          <input type="text" id="dateTo" class="date-input" placeholder="YYYY-MM-DD"
+            pattern="\d{4}-\d{2}-\d{2}" maxlength="10"
+            onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" />
+        </div>
+        <button class="btn-filter" id="btnSearch">
+          <i class="ti ti-search"></i> 검색
+        </button>
+        <button class="btn-reset" id="btnReset" title="필터 초기화">
+          <i class="ti ti-x"></i>
+        </button>
+        <button class="btn-adv-date" id="btnAdvDate" title="날짜 상세 검색">
+          <i class="ti ti-calendar-stats"></i> 날짜 상세
+        </button>
+      </div>
+    </div>
 
-        <!-- 월 탭 -->
-        <div class="date-tab-content" id="tab-month">
-          <select id="filterMonthYear">
-            <option value="">연도 선택</option>
-          </select>
-          <select id="filterMonth">
+    <!-- 고급 날짜 필터 패널 -->
+    <div class="adv-panel" id="advPanel">
+      <div class="adv-panel-inner">
+        <div class="adv-tabs">
+          <button class="adv-tab active" data-atab="range">기간</button>
+          <button class="adv-tab" data-atab="year">연도</button>
+          <button class="adv-tab" data-atab="month">월별</button>
+          <button class="adv-tab" data-atab="day">날짜</button>
+          <button class="adv-tab" data-atab="hour">시간대</button>
+        </div>
+        <div class="adv-tab-body active" id="atab-range">
+          <div class="adv-date-field">
+            <input type="text" id="advFrom" class="adv-input" placeholder="YYYY-MM-DD"
+              pattern="\d{4}-\d{2}-\d{2}" maxlength="10"
+              onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" />
+            <span class="adv-hint">직접 입력 가능</span>
+          </div>
+          <span class="adv-sep">~</span>
+          <div class="adv-date-field">
+            <input type="text" id="advTo" class="adv-input" placeholder="YYYY-MM-DD"
+              pattern="\d{4}-\d{2}-\d{2}" maxlength="10"
+              onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" />
+          </div>
+        </div>
+        <div class="adv-tab-body" id="atab-year">
+          <select id="advYear" class="adv-input"><option value="">연도 선택</option></select>
+        </div>
+        <div class="adv-tab-body" id="atab-month">
+          <select id="advMonthYear" class="adv-input"><option value="">연도</option></select>
+          <select id="advMonth" class="adv-input">
             <option value="">월 선택</option>
-            <option value="1">1월</option><option value="2">2월</option>
-            <option value="3">3월</option><option value="4">4월</option>
-            <option value="5">5월</option><option value="6">6월</option>
-            <option value="7">7월</option><option value="8">8월</option>
-            <option value="9">9월</option><option value="10">10월</option>
-            <option value="11">11월</option><option value="12">12월</option>
+            <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
+            <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
+            <option value="7">7월</option><option value="8">8월</option><option value="9">9월</option>
+            <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
           </select>
         </div>
-
-        <!-- 날짜 탭 -->
-        <div class="date-tab-content" id="tab-day">
-          <input type="date" id="filterDay" />
+        <div class="adv-tab-body" id="atab-day">
+          <input type="text" id="advDay" class="adv-input" placeholder="YYYY-MM-DD"
+            pattern="\d{4}-\d{2}-\d{2}" maxlength="10"
+            onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" />
         </div>
-
-        <!-- 시간 탭 -->
-        <div class="date-tab-content" id="tab-hour">
-          <input type="date" id="filterHourDate" />
-          <select id="filterHour">
+        <div class="adv-tab-body" id="atab-hour">
+          <input type="text" id="advHourDate" class="adv-input" placeholder="YYYY-MM-DD"
+            pattern="\d{4}-\d{2}-\d{2}" maxlength="10"
+            onfocus="this.type='date'" onblur="if(!this.value)this.type='text'" />
+          <select id="advHour" class="adv-input">
             <option value="">시간 선택</option>
             <option value="0">00시</option><option value="1">01시</option>
             <option value="2">02시</option><option value="3">03시</option>
@@ -170,129 +309,163 @@
             <option value="22">22시</option><option value="23">23시</option>
           </select>
         </div>
-      </div>
-
-      <div class="search-buttons">
-        <button class="btn-search-primary" id="btnApplySearch">
-          <i class="fa-solid fa-search"></i> 검색
-        </button>
-        <button class="btn-reset" id="btnReset">
-          <i class="fa-solid fa-xmark"></i> 초기화
+        <button class="btn-adv-apply" id="btnAdvApply">
+          <i class="ti ti-search"></i> 조회
         </button>
       </div>
     </div>
 
-    <!-- 카테고리 현황 -->
-    <div class="category-panel">
-      <div class="panel-title">
-        <i class="fa-solid fa-chart-pie"></i> 카테고리 현황
-      </div>
-      <ul class="category-list" id="categoryList">
-        <li class="loading-item"><i class="fa-solid fa-spinner fa-spin"></i> 로딩 중...</li>
-      </ul>
-    </div>
-
-    <!-- 크롤링 로그 -->
-    <div class="crawl-status-panel">
-      <div class="panel-title">
-        <i class="fa-solid fa-server"></i> 수집 현황
-      </div>
-      <div class="crawl-info" id="crawlInfo">
-        <div class="crawl-row">
-          <span>상태</span>
-          <span class="crawl-status-badge idle" id="crawlStatusBadge">대기 중</span>
-        </div>
-        <div class="crawl-row">
-          <span>마지막 수집</span>
-          <span id="crawlLastTime">-</span>
-        </div>
-        <div class="crawl-row">
-          <span>다음 수집</span>
-          <span id="crawlNextTime">-</span>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- 메인 콘텐츠 -->
-  <main class="main-content">
-
-    <!-- 상단 탭 네비게이션 -->
-    <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="latest">
-        <i class="fa-solid fa-fire"></i> 최신 뉴스
-      </button>
-      <button class="tab-btn" data-tab="search-result" id="tabSearchResult" style="display:none">
-        <i class="fa-solid fa-search"></i> 검색 결과
-        <span class="result-count" id="resultCount">0</span>
-      </button>
-      <button class="tab-btn" data-tab="law">
-        <i class="fa-solid fa-scale-balanced"></i> 법령·제도
-      </button>
-      <button class="tab-btn" data-tab="policy">
-        <i class="fa-solid fa-landmark"></i> 정책·브리핑
-      </button>
-      <button class="tab-btn" data-tab="disaster">
-        <i class="fa-solid fa-triangle-exclamation"></i> 중대재해
-      </button>
-    </nav>
-
-    <!-- 결과 정렬 & 정보 바 -->
+    <!-- 결과 바 -->
     <div class="result-bar">
-      <div class="result-info" id="resultInfo">전체 기사 로딩 중...</div>
-      <div class="sort-wrap">
-        <label>정렬</label>
-        <select id="sortOrder">
+      <div class="result-left">
+        <h2 class="page-title" id="pageTitle">전체 최신 기사</h2>
+        <span class="result-cnt" id="resultCnt"></span>
+      </div>
+      <div class="result-right">
+        <button class="icon-btn" id="btnAdvDate2" title="날짜 상세">
+          <i class="ti ti-calendar-stats"></i>
+        </button>
+        <button class="btn-excel-down" id="btnExcelDown" title="엑셀 다운로드">
+          <i class="ti ti-file-spreadsheet"></i> 엑셀 다운로드
+        </button>
+        <select id="sortOrder" class="ctrl-sel">
           <option value="latest">최신순</option>
           <option value="oldest">오래된순</option>
         </select>
-        <select id="pageSize">
+        <select id="pageSize" class="ctrl-sel">
           <option value="20">20개</option>
           <option value="30">30개</option>
           <option value="50">50개</option>
         </select>
+        <div class="view-toggle">
+          <button class="view-btn active" id="viewCard" title="카드뷰">
+            <i class="ti ti-layout-grid"></i>
+          </button>
+          <button class="view-btn" id="viewList" title="리스트뷰">
+            <i class="ti ti-list"></i>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- 뉴스 피드 -->
-    <div class="news-feed" id="newsFeed">
-      <div class="loading-spinner">
-        <i class="fa-solid fa-spinner fa-spin"></i>
-        <p>데이터를 불러오는 중입니다...</p>
-      </div>
+    <!-- 피드 -->
+    <div class="feed-wrap">
+      <div class="news-grid" id="newsFeed"></div>
+      <div class="pager" id="pager"></div>
     </div>
-
-    <!-- 페이지네이션 -->
-    <div class="pagination" id="pagination"></div>
 
   </main>
 </div>
 
-<!-- ── 기사 상세 모달 ──────────────────────────────────────── -->
-<div class="modal-overlay" id="articleModal">
-  <div class="modal-content">
-    <div class="modal-header">
-      <div class="modal-meta">
-        <span class="modal-category" id="modalCategory">-</span>
-        <span class="modal-source" id="modalSource">-</span>
-        <span class="modal-date" id="modalDate">-</span>
-      </div>
-      <button class="modal-close" id="modalClose"><i class="fa-solid fa-xmark"></i></button>
+<!-- ── 기사 상세 드로어 ────────────────────────────────────── -->
+<div class="drawer-overlay" id="overlay"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div class="drawer-tags" id="drawerTags"></div>
+    <div class="drawer-actions">
+      <!-- 북마크 버튼 -->
+      <button class="drawer-action-btn" id="drawerBookmarkBtn" title="북마크">
+        <i class="ti ti-bookmark"></i>
+      </button>
+      <!-- 공유 버튼 -->
+      <button class="drawer-action-btn" id="drawerShareBtn" title="공유">
+        <i class="ti ti-share"></i>
+      </button>
+      <!-- 프린트 버튼 -->
+      <button class="drawer-action-btn" id="drawerPrintBtn" title="인쇄">
+        <i class="ti ti-printer"></i>
+      </button>
+      <a href="#" target="_blank" rel="noopener noreferrer" class="drawer-orig-btn" id="drawerOrigBtn">
+        <i class="ti ti-external-link"></i> 원문 보기
+      </a>
+      <button class="drawer-close" id="drawerClose"><i class="ti ti-x"></i></button>
     </div>
-    <div class="modal-body">
-      <h2 class="modal-title" id="modalTitle">-</h2>
-      <div class="modal-content-text" id="modalContent">-</div>
-      <div class="modal-actions">
-        <a href="#" target="_blank" class="btn-original" id="modalLink">
-          <i class="fa-solid fa-external-link"></i> 원문 보기
+  </div>
+  <div class="drawer-body">
+    <h1 class="drawer-title" id="drawerTitle"></h1>
+    <div class="drawer-meta" id="drawerMeta"></div>
+    <!-- 법제처 링크 안내 -->
+    <div class="drawer-law-notice" id="drawerLawNotice" style="display:none">
+      <i class="ti ti-info-circle"></i>
+      <span>국가법령정보센터(법제처) 링크입니다. 위 <strong>법령 검색</strong> 버튼을 클릭하면 해당 법령을 검색할 수 있습니다.</span>
+    </div>
+    <!-- 정부기관(고용노동부·안전보건공단) 안내 -->
+    <div class="drawer-gov-notice" id="drawerGovNotice" style="display:none">
+      <i class="ti ti-info-circle"></i>
+      <span></span>
+    </div>
+    <!-- 정부기관 콘텐츠 뷰어 -->
+    <div class="drawer-gov-viewer" id="drawerGovViewer" style="display:none">
+      <div class="gov-viewer-header" id="govViewerHeader">
+        <i class="ti ti-browser"></i>
+        <span>공식 사이트 콘텐츠</span>
+      </div>
+      <div class="gov-viewer-content" id="drawerGovViewerContent">
+        <div class="gov-viewer-loading">
+          <i class="ti ti-loader spin-i"></i> 내용을 불러오는 중...
+        </div>
+      </div>
+      <iframe id="drawerGovViewerFrame"
+        class="gov-viewer-frame"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        referrerpolicy="no-referrer"
+        loading="lazy"
+        style="display:none"
+        title="공식 사이트 미리보기">
+      </iframe>
+    </div>
+    <div class="drawer-summary-box" id="drawerSummaryBox"></div>
+    <div class="drawer-content" id="drawerContent"></div>
+  </div>
+  <div class="drawer-footer">
+    <a href="#" target="_blank" rel="noopener noreferrer" class="btn-goto-orig" id="drawerGotoBtn">
+      <i class="ti ti-external-link"></i> 원문 기사 바로가기
+    </a>
+  </div>
+</div>
+
+<!-- ── 공유 모달 ───────────────────────────────────────────── -->
+<div class="share-modal-overlay" id="shareModalOverlay" style="display:none">
+  <div class="share-modal" id="shareModal">
+    <div class="share-modal-head">
+      <span>기사 공유</span>
+      <button class="share-modal-close" id="shareModalClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="share-modal-body">
+      <div class="share-url-row">
+        <input type="text" id="shareUrlInput" class="share-url-input" readonly />
+        <button class="share-copy-btn" id="shareCopyBtn">
+          <i class="ti ti-copy"></i> 복사
+        </button>
+      </div>
+      <div class="share-btns">
+        <a class="share-btn share-twitter" id="shareTwitter" target="_blank" rel="noopener">
+          <i class="ti ti-brand-x"></i> X(트위터)
+        </a>
+        <a class="share-btn share-kakao" id="shareKakao" href="#" rel="noopener">
+          <i class="ti ti-message-circle"></i> 카카오톡
+        </a>
+        <a class="share-btn share-line" id="shareLine" target="_blank" rel="noopener">
+          <i class="ti ti-brand-line"></i> LINE
+        </a>
+        <a class="share-btn share-facebook" id="shareFacebook" target="_blank" rel="noopener">
+          <i class="ti ti-brand-facebook"></i> Facebook
         </a>
       </div>
+      <!-- 카카오톡 안내 메시지 -->
+      <p class="share-kakao-notice" id="shareKakaoNotice" style="display:none">
+        <i class="ti ti-info-circle"></i>
+        모바일에서는 카카오톡이 자동으로 열립니다. PC에서는 URL을 복사하여 카카오톡에 직접 붙여넣기 하시기 바랍니다.
+      </p>
     </div>
   </div>
 </div>
 
-<!-- 알림 토스트 -->
-<div class="toast" id="toast"></div>
+<!-- ── 토스트 ─────────────────────────────────────────────── -->
+<div class="toast-container" id="toastCont"></div>
+
+<!-- 인쇄용 숨김 영역 -->
+<div class="print-area" id="printArea"></div>
 
 <script src="/js/app.js"></script>
 </body>
