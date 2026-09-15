@@ -1835,7 +1835,7 @@ async function loadTrendChart(days) {
 
 // ── 긴급 모니터링 기사 ─────────────────────────────────────────
 async function loadUrgentList() {
-  const data = await apiFetch('/api/articles/urgent?limit=6');
+  const data = await apiFetch('/api/articles/urgent?limit=7');
   const el = $('#urgentList');
   if (!el) return;
   if (!data?.success || !data.data?.length) {
@@ -1858,7 +1858,7 @@ async function loadIndustryStats() {
   const data = await apiFetch('/api/stats/industry?days=30');
   const el = $('#industryList');
   if (!el || !data?.success) return;
-  const rows = data.data.filter(r => r.cnt > 0).slice(0, 7);
+  const rows = data.data.filter(r => r.cnt > 0).slice(0, 8);
   if (!rows.length) { el.innerHTML = '<li class="industry-empty">데이터 없음</li>'; return; }
   const maxCnt = rows[0].cnt;
   const colors = ['#ef4444','#f97316','#f59e0b','#10b981','#3b82f6','#8b5cf6','#64748b'];
