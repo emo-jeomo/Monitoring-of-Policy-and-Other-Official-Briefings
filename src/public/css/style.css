@@ -2012,9 +2012,18 @@ body.sidebar-active {
   grid-template-columns: 1fr 1fr 1fr;
   gap: 12px;
   padding-bottom: 6px;
+  /* ★ 3개 카드 등높이: stretch(기본값이지만 명시) */
+  align-items: stretch;
 }
 
 /* 긴급 기사 */
+/* ★ 하단 3개 카드: flex column → 내부 리스트가 남은 공간 채움 (등높이) */
+.dash-card-urgent,
+.dash-card-industry,
+.dash-card-region {
+  display: flex;
+  flex-direction: column;
+}
 .dash-card-urgent { border-left: 3px solid #ef4444; }
 .urgent-title { color: #ef4444 !important; }
 .urgent-blink-dot {
@@ -2025,10 +2034,12 @@ body.sidebar-active {
 @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:.2; } }
 .urgent-list {
   list-style:none; margin:0; padding:0;
-  display:flex; flex-direction:column; gap:6px;
+  display:flex; flex-direction:column; gap:5px;
+  /* ★ 카드 내 남은 공간 채움 → 3개 카드 높이 동기화 */
+  flex: 1;
 }
 .urgent-item {
-  padding: 7px 10px; border-radius:8px;
+  padding: 6px 10px; border-radius:7px;
   background:var(--surface-3, var(--navy-50));
   cursor:pointer; transition:background .15s;
   border-left: 2px solid #ef4444;
@@ -2064,7 +2075,12 @@ body.sidebar-active {
 }
 
 /* 업종별 */
-.industry-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.industry-list {
+  list-style:none; margin:0; padding:0;
+  display:flex; flex-direction:column; gap:6px;
+  /* ★ 카드 내 남은 공간 채움 */
+  flex: 1;
+}
 .industry-empty {
   color:var(--text-muted, var(--navy-400)); font-size:12px;
   display:flex; align-items:center; justify-content:center; padding:16px;
@@ -2088,17 +2104,31 @@ body.sidebar-active {
   font-size:11px; color:var(--text-muted, var(--navy-400));
   font-weight:600; flex-shrink:0; font-family: var(--font-body);
 }
-.industry-bar-wrap { height:4px; background:var(--surface-3, var(--navy-50)); border-radius:2px; overflow:hidden; }
-.industry-bar { height:100%; border-radius:2px; transition:width .6s ease; }
+.industry-bar-wrap {
+  height: 5px;
+  background:var(--surface-3, var(--navy-50)); border-radius:3px; overflow:hidden;
+  /* ★ 호버 툴팁 기준점 */
+  position: relative;
+}
+.industry-bar { height:100%; border-radius:3px; transition:width .6s ease; }
 
 /* 지역별 */
-.region-list { display:flex; flex-direction:column; gap:5px; }
+.region-list {
+  display:flex; flex-direction:column; gap:6px;
+  /* ★ 카드 내 남은 공간 채움 */
+  flex: 1;
+}
 .region-empty {
   color:var(--text-muted, var(--navy-400)); font-size:12px;
   display:flex; align-items:center; justify-content:center; padding:16px;
   font-family: var(--font-body);
 }
-.region-item { padding:4px 0; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.region-item {
+  padding: 4px 0;
+  cursor:pointer; -webkit-tap-highlight-color:transparent;
+  /* ★ 호버 툴팁 기준점 */
+  position: relative;
+}
 .region-item-head {
   display:flex; align-items:center; justify-content:space-between; margin-bottom:3px;
 }
@@ -2115,11 +2145,69 @@ body.sidebar-active {
 .region-badge-danger  { background:rgba(239,68,68,.12);  color:#ef4444; }
 .region-badge-warning { background:rgba(249,115,22,.12); color:#f97316; }
 .region-badge-normal  { background:rgba(30,64,104,.1);   color:var(--accent-main, var(--navy-500)); }
-.region-bar-wrap { height:3px; background:var(--surface-3, var(--navy-50)); border-radius:2px; overflow:hidden; }
-.region-bar { height:100%; border-radius:2px; transition:width .6s ease; }
+.region-bar-wrap {
+  height: 5px;
+  background:var(--surface-3, var(--navy-50)); border-radius:3px; overflow:hidden;
+  position: relative;
+}
+.region-bar { height:100%; border-radius:3px; transition:width .6s ease; }
 .region-bar-danger  { background:#ef4444; }
 .region-bar-warning { background:#f97316; }
 .region-bar-normal  { background:var(--accent-main, var(--navy-500)); }
+
+/* ══════════════════════════════════════════════════════════════
+   대시보드 차트 호버 툴팁 (트렌드 바차트 / 업종 바 / 지역 바 공용)
+══════════════════════════════════════════════════════════════ */
+#dashChartTooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  background: var(--navy-900, #0a1628);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-family: var(--font-body);
+  line-height: 1.55;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+  white-space: nowrap;
+  max-width: 220px;
+  white-space: normal;
+  word-break: keep-all;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .12s ease, transform .12s ease;
+  /* 표시 시: JS에서 opacity:1, transform:translateY(0) */
+}
+#dashChartTooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+#dashChartTooltip .tt-title {
+  font-weight: 700;
+  font-size: 12.5px;
+  margin-bottom: 3px;
+  color: #fff;
+}
+#dashChartTooltip .tt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: rgba(255,255,255,.82);
+}
+#dashChartTooltip .tt-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+#dashChartTooltip .tt-val {
+  font-weight: 700;
+  color: #fff;
+  margin-left: auto;
+  padding-left: 8px;
+}
 
 /* ── 대시보드 토글 버튼 ───────────────────────────────────────── */
 .dash-toggle-btn {

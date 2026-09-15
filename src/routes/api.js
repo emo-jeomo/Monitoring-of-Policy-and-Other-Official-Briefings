@@ -400,23 +400,27 @@ router.get('/stats/hourly', (req, res) => {
 });
 
 // ─── 크롤링 관리 ───────────────────────────────────────────
-// GET·POST /api/crawl/run - 수동 크롤링 실행 (apiFetch는 GET, fetch POST 양쪽 지원)
-router.all('/crawl/run', async (req, res) => {
+// 공통 핸들러 (POST /api/crawl  ←  클라이언트 호출 경로
+//              GET·POST /api/crawl/run  ← 기존 경로 호환)
+async function handleCrawl(req, res) {
   try {
     const schedulerStatus = getSchedulerStatus();
     if (schedulerStatus.isRunning) {
       return res.json({ success: false, message: '현재 크롤링이 진행 중입니다.' });
     }
-
-    // 비동기로 크롤링 시작 (응답은 즉시 반환)
-    res.json({ success: true, message: '크롤링을 시작했습니다.' });
-
-    // 백그라운드에서 실행
+    // 즉시 응답 후 백그라운드에서 실행
+    res.json({ success: true, message: '크롤링을 시작했습니다. 잠시 후 피드가 갱신됩니다.' });
     runAllCrawlers().catch(console.error);
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
-});
+}
+
+// POST /api/crawl  — 프론트엔드 "지금 업데이트" 버튼
+router.post('/crawl', handleCrawl);
+
+// GET·POST /api/crawl/run  — 기존 경로 하위 호환
+router.all('/crawl/run', handleCrawl);
 
 // GET /api/crawl/status - 크롤링 상태 조회
 router.get('/crawl/status', (req, res) => {

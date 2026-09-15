@@ -113,6 +113,77 @@ function relTime(d) {
   return String(d).substring(0, 10);
 }
 
+// ══════════════════════════════════════════════════════════════
+// 대시보드 차트 공용 호버 툴팁 헬퍼
+// ══════════════════════════════════════════════════════════════
+const DashTooltip = (() => {
+  let _el = null;
+  let _hideTimer = null;
+
+  function el() {
+    if (!_el) _el = document.getElementById('dashChartTooltip');
+    return _el;
+  }
+
+  /**
+   * 툴팁 표시
+   * @param {MouseEvent|{clientX,clientY}} e  - 마우스 이벤트 (위치 결정)
+   * @param {string}  title  - 굵은 제목 (날짜, 업종명 등)
+   * @param {Array<{color:string, label:string, value:string|number}>} rows
+   */
+  function show(e, title, rows) {
+    const t = el(); if (!t) return;
+    if (_hideTimer) { clearTimeout(_hideTimer); _hideTimer = null; }
+
+    const titleHtml = title
+      ? `<div class="tt-title">${title}</div>`
+      : '';
+    const rowsHtml = rows.map(r =>
+      `<div class="tt-row">
+        <span class="tt-dot" style="background:${r.color}"></span>
+        <span>${r.label}</span>
+        <span class="tt-val">${r.value}</span>
+      </div>`
+    ).join('');
+    t.innerHTML = titleHtml + rowsHtml;
+
+    // 위치 계산: 뷰포트 경계 넘지 않도록
+    const pad = 12;
+    const tw = t.offsetWidth  || 180;
+    const th = t.offsetHeight || 60;
+    let x = e.clientX + 14;
+    let y = e.clientY - th / 2;
+    if (x + tw + pad > window.innerWidth)  x = e.clientX - tw - 14;
+    if (y < pad)                            y = pad;
+    if (y + th + pad > window.innerHeight)  y = window.innerHeight - th - pad;
+    t.style.left = x + 'px';
+    t.style.top  = y + 'px';
+    t.classList.add('visible');
+  }
+
+  function move(e) {
+    const t = el(); if (!t || !t.classList.contains('visible')) return;
+    const pad = 12;
+    const tw = t.offsetWidth  || 180;
+    const th = t.offsetHeight || 60;
+    let x = e.clientX + 14;
+    let y = e.clientY - th / 2;
+    if (x + tw + pad > window.innerWidth)  x = e.clientX - tw - 14;
+    if (y < pad)                            y = pad;
+    if (y + th + pad > window.innerHeight)  y = window.innerHeight - th - pad;
+    t.style.left = x + 'px';
+    t.style.top  = y + 'px';
+  }
+
+  function hide() {
+    _hideTimer = setTimeout(() => {
+      const t = el(); if (t) t.classList.remove('visible');
+    }, 80);
+  }
+
+  return { show, move, hide };
+})();
+
 // crawled_at(UTC 저장) → KST 문자열 변환 (relTime용)
 function crawledAtToKST(utcStr) {
   if (!utcStr) return null;
@@ -1732,6 +1803,34 @@ async function loadTrendChart(days) {
   ctx.textAlign = 'right';
   ctx.fillText(maxVal, padL - 2, padT + 8);
   ctx.fillText(0, padL - 2, H - padB + 6);
+
+  // ── 트렌드 바차트 호버 툴팁 ────────────────────────────────
+  // 이전 이벤트 제거 후 재등록 (주기 전환 시 중복 방지)
+  el._trendMM = e => {
+    const rect = el.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (el.width / rect.width / dpr);
+    const slotW = chartW / rows.length;
+    const idx = Math.floor((mx - padL) / slotW);
+    if (idx < 0 || idx >= rows.length) { DashTooltip.hide(); return; }
+    const r = rows[idx];
+    const other = (r.law||0) + (r.policy||0) + (r.health||0) + (r.agency||0);
+    DashTooltip.show(e,
+      (r.day||'').substring(5) + ' (' + r.total + '건)',
+      [
+        { color: '#ef4444', label: '중대재해',    value: (r.disaster||0) + '건' },
+        { color: '#f97316', label: '산업재해·안전', value: (r.safety||0)  + '건' },
+        { color: '#3b82f6', label: '법령·정책·보건·기관', value: other + '건' },
+      ].filter(x => parseInt(x.value) > 0)
+    );
+    DashTooltip.move(e);
+  };
+  el._trendML = () => DashTooltip.hide();
+  el.removeEventListener('mousemove',  el._trendMM);
+  el.removeEventListener('mouseleave', el._trendML);
+  el.removeEventListener('touchstart', el._trendML);
+  el.addEventListener('mousemove',  el._trendMM);
+  el.addEventListener('mouseleave', el._trendML);
+  el.addEventListener('touchstart', el._trendML, { passive: true });
 }
 
 // ── 긴급 모니터링 기사 ─────────────────────────────────────────
@@ -1765,7 +1864,9 @@ async function loadIndustryStats() {
   const colors = ['#ef4444','#f97316','#f59e0b','#10b981','#3b82f6','#8b5cf6','#64748b'];
   el.innerHTML = rows.map((r, i) => {
     const pct = maxCnt > 0 ? Math.round((r.cnt / maxCnt) * 100) : 0;
-    return `<li class="industry-item">
+    const share = maxCnt > 0 ? ((r.cnt / maxCnt) * 100).toFixed(1) : '0';
+    return `<li class="industry-item"
+        data-name="${r.industry}" data-cnt="${r.cnt}" data-pct="${share}" data-color="${colors[i]||'#64748b'}">
       <div class="industry-item-head">
         <span class="industry-rank">${i+1}</span>
         <span class="industry-name">${r.industry}</span>
@@ -1776,6 +1877,18 @@ async function loadIndustryStats() {
       </div>
     </li>`;
   }).join('');
+
+  // 업종 바 호버 툴팁
+  $$('.industry-item', el).forEach(li => {
+    li.addEventListener('mouseenter', e => {
+      DashTooltip.show(e,
+        li.dataset.name,
+        [{ color: li.dataset.color, label: '기사 수', value: li.dataset.cnt + '건 (' + li.dataset.pct + '%)' }]
+      );
+    });
+    li.addEventListener('mousemove',  e => DashTooltip.move(e));
+    li.addEventListener('mouseleave', () => DashTooltip.hide());
+  });
 }
 
 // ── 지역별 사고 현황 ──────────────────────────────────────────
@@ -1786,10 +1899,13 @@ async function loadRegionStats() {
   const rows = data.data.slice(0, 8);
   if (!rows.length) { el.innerHTML = '<div class="region-empty">지역 데이터 없음</div>'; return; }
   const maxCnt = rows[0].cnt;
+  const regionColors = { danger: '#ef4444', warning: '#f97316', normal: 'var(--accent-main,#1e4068)' };
   el.innerHTML = rows.map(r => {
-    const pct = maxCnt > 0 ? Math.round((r.cnt / maxCnt) * 100) : 0;
+    const pct   = maxCnt > 0 ? Math.round((r.cnt / maxCnt) * 100) : 0;
+    const share = maxCnt > 0 ? ((r.cnt / maxCnt) * 100).toFixed(1) : '0';
     const level = pct >= 80 ? 'danger' : pct >= 50 ? 'warning' : 'normal';
-    return `<div class="region-item" data-region="${r.region}">
+    return `<div class="region-item" data-region="${r.region}"
+        data-cnt="${r.cnt}" data-pct="${share}" data-level="${level}">
       <div class="region-item-head">
         <span class="region-name"><i class="ti ti-map-pin"></i>${r.region}</span>
         <span class="region-badge region-badge-${level}">${r.cnt}건</span>
@@ -1802,6 +1918,19 @@ async function loadRegionStats() {
   $$('.region-item', el).forEach(div => {
     div.style.cursor = 'pointer';
     div.addEventListener('click', () => { S.query = div.dataset.region; const gs = $('#globalSearch'); if (gs) gs.value = div.dataset.region; doSearch(); });
+
+    // 지역 바 호버 툴팁
+    const lvlColor = { danger: '#ef4444', warning: '#f97316', normal: '#1e4068' };
+    div.addEventListener('mouseenter', e => {
+      const lv = div.dataset.level || 'normal';
+      const label = lv === 'danger' ? '위험' : lv === 'warning' ? '주의' : '보통';
+      DashTooltip.show(e,
+        div.dataset.region + ' 지역',
+        [{ color: lvlColor[lv], label: '기사 수 · ' + label, value: div.dataset.cnt + '건 (' + div.dataset.pct + '%)' }]
+      );
+    });
+    div.addEventListener('mousemove',  e => DashTooltip.move(e));
+    div.addEventListener('mouseleave', () => DashTooltip.hide());
   });
 }
 
