@@ -1678,16 +1678,20 @@ async function loadTrendChart(days) {
   const el = $('#trendChart');
   if (!el || rows.length === 0) return;
   const ctx = el.getContext('2d');
-  // 모바일 DPR 대응 – 부모 컨테이너 폭 기반
   const dpr  = window.devicePixelRatio || 1;
-  const displayW = Math.max(el.parentElement?.clientWidth || 0, 200);
-  // ★ CSS와 동기화: 480px→90, 640px→110, 768px→160, 데스크탑→190
-  const iw2 = window.innerWidth;
-  const displayH = iw2 <= 480 ? 90 : iw2 <= 640 ? 110 : iw2 <= 768 ? 160 : 190;
+  const iw2  = window.innerWidth;
+  const wrap = el.parentElement;
+  // ★ CSS flex:1 stretch로 래퍼가 도넛 카드와 동일 높이로 확장된 뒤 측정
+  //   clientWidth/Height: 실제 렌더된 px (rAF 2회 후 호출로 레이아웃 확정 보장)
+  const displayW = Math.max(wrap?.clientWidth  || 0, 200);
+  const stretchH = wrap?.clientHeight ?? 0;
+  // 폴백: stretch 미작동 시 (모바일 세로배치) breakpoint 고정값
+  const fallbackH = iw2 <= 480 ? 90 : iw2 <= 640 ? 110 : iw2 <= 768 ? 160 : 200;
+  const displayH  = stretchH > 40 ? stretchH : fallbackH;
+  // canvas 내부 해상도를 DPR 배율로 설정
   el.width  = displayW * dpr;
   el.height = displayH * dpr;
-  el.style.width  = displayW + 'px';
-  el.style.height = displayH + 'px';
+  // CSS style은 건드리지 않음 (flex:1/100%를 CSS가 관리)
   ctx.scale(dpr, dpr);
   const W = displayW, H = displayH;
   ctx.clearRect(0, 0, W, H);
@@ -1803,7 +1807,11 @@ async function loadRegionStats() {
 
 // ── 대시보드 전체 로드 ────────────────────────────────────────
 async function loadNewDashboard() {
+  // ① 도넛·KPI·하단 카드 먼저 렌더 (도넛 카드 높이 확정)
   await Promise.allSettled([loadDashboardKPI(), loadDonutChart(), loadUrgentList(), loadIndustryStats(), loadRegionStats()]);
+  // ② 도넛 카드 높이가 CSS stretch로 확정된 뒤 트렌드 canvas 크기 측정
+  //    → requestAnimationFrame 2회: 첫 번째는 레이아웃 계산, 두 번째는 실제 픽셀 확정
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   await loadTrendChart(14);
   $$('.trend-btn').forEach(btn => {
     if (btn._trendBound) return; btn._trendBound = true;
