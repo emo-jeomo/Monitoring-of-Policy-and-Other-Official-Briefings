@@ -201,6 +201,124 @@
   <!-- 콘텐츠 메인 -->
   <main class="content-area">
 
+    <!-- ── 대시보드 패널 (lawmake.kr 벤치마킹) ──────────────────── -->
+    <div class="dashboard-panel" id="dashboardPanel">
+
+      <!-- 주요 지표 카드 행 -->
+      <div class="dash-kpi-row">
+        <div class="dash-kpi-card kpi-total" id="dkpiTotal" title="전체 수집 기사 조회">
+          <div class="kpi-icon"><i class="ti ti-database"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-val" id="dkpiTotalVal">—</div>
+            <div class="kpi-label">전체 수집</div>
+          </div>
+          <div class="kpi-trend" id="dkpiTotalTrend"></div>
+        </div>
+        <div class="dash-kpi-card kpi-today" id="dkpiToday" title="오늘 수집 기사 조회">
+          <div class="kpi-icon"><i class="ti ti-calendar-event"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-val accent" id="dkpiTodayVal">—</div>
+            <div class="kpi-label">오늘 수집</div>
+          </div>
+          <div class="kpi-trend" id="dkpiTodayTrend"></div>
+        </div>
+        <div class="dash-kpi-card kpi-disaster" id="dkpiDisaster" title="중대재해 기사 조회">
+          <div class="kpi-icon kpi-icon-red"><i class="ti ti-alert-triangle"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-val danger" id="dkpiDisasterVal">—</div>
+            <div class="kpi-label">오늘 중대재해</div>
+          </div>
+          <div class="kpi-trend" id="dkpiDisasterTrend"></div>
+        </div>
+        <div class="dash-kpi-card kpi-week" id="dkpiWeek" title="이번주 수집 기사 조회">
+          <div class="kpi-icon kpi-icon-green"><i class="ti ti-chart-bar"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-val green" id="dkpiWeekVal">—</div>
+            <div class="kpi-label">이번주 수집</div>
+          </div>
+          <div class="kpi-trend" id="dkpiWeekTrend"></div>
+        </div>
+      </div>
+
+      <!-- 차트 행: 카테고리 도넛 + 주간 트렌드 바 차트 -->
+      <div class="dash-chart-row">
+        <!-- 카테고리 도넛 차트 -->
+        <div class="dash-card dash-card-donut">
+          <div class="dash-card-head">
+            <span class="dash-card-title"><i class="ti ti-chart-donut-2"></i> 카테고리별 현황</span>
+            <span class="dash-card-sub" id="donutPeriodLabel">전체</span>
+          </div>
+          <div class="donut-wrap">
+            <canvas id="donutChart" width="140" height="140"></canvas>
+            <div class="donut-center">
+              <span class="donut-center-val" id="donutCenterVal">—</span>
+              <span class="donut-center-label">건</span>
+            </div>
+          </div>
+          <ul class="donut-legend" id="donutLegend"></ul>
+        </div>
+
+        <!-- 일별 트렌드 바 차트 -->
+        <div class="dash-card dash-card-trend">
+          <div class="dash-card-head">
+            <span class="dash-card-title"><i class="ti ti-chart-bar"></i> 수집 트렌드</span>
+            <div class="trend-period-btns">
+              <button class="trend-btn active" data-days="14">2주</button>
+              <button class="trend-btn" data-days="30">1개월</button>
+              <button class="trend-btn" data-days="90">3개월</button>
+            </div>
+          </div>
+          <div class="trend-chart-wrap">
+            <canvas id="trendChart" width="400" height="140"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 하단 행: 긴급 기사 + 위험 업종 + 지역별 -->
+      <div class="dash-bottom-row">
+        <!-- 긴급 모니터링 기사 -->
+        <div class="dash-card dash-card-urgent">
+          <div class="dash-card-head">
+            <span class="dash-card-title urgent-title"><i class="ti ti-siren"></i> 긴급 모니터링</span>
+            <span class="urgent-blink-dot"></span>
+          </div>
+          <ul class="urgent-list" id="urgentList">
+            <li class="urgent-empty"><i class="ti ti-loader spin-i"></i> 로딩 중...</li>
+          </ul>
+        </div>
+
+        <!-- 위험 업종별 현황 -->
+        <div class="dash-card dash-card-industry">
+          <div class="dash-card-head">
+            <span class="dash-card-title"><i class="ti ti-building-factory-2"></i> 업종별 동향</span>
+            <span class="dash-card-sub">최근 30일</span>
+          </div>
+          <ul class="industry-list" id="industryList">
+            <li class="industry-empty"><i class="ti ti-loader spin-i"></i></li>
+          </ul>
+        </div>
+
+        <!-- 지역별 사고 현황 -->
+        <div class="dash-card dash-card-region">
+          <div class="dash-card-head">
+            <span class="dash-card-title"><i class="ti ti-map-pin"></i> 지역별 현황</span>
+            <span class="dash-card-sub">최근 30일</span>
+          </div>
+          <div class="region-list" id="regionList">
+            <div class="region-empty"><i class="ti ti-loader spin-i"></i></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <!-- /dashboard-panel -->
+
+    <!-- 대시보드 토글 버튼 -->
+    <button class="dash-toggle-btn" id="dashToggleBtn" title="대시보드 접기/펼치기">
+      <i class="ti ti-chevron-up" id="dashToggleIcon"></i>
+      <span id="dashToggleLabel">대시보드 접기</span>
+    </button>
+
     <!-- 필터 바 -->
     <div class="filter-bar">
       <div class="filter-bar-inner">

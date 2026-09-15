@@ -708,6 +708,12 @@ function printArticle(article) {
   window.print();
 }
 
+// ── 긴급 기사 판별 ──────────────────────────────────────────────
+const URGENT_KWS = ['명 사망','사망자','다수 사망','올해만','또 사망','첫 구속','동시 사망','명이 숨','수십 명'];
+function checkUrgent(title) {
+  return URGENT_KWS.some(kw => title.includes(kw));
+}
+
 // ── 카드 렌더 ──────────────────────────────────────────────────
 function renderCard(a) {
   const cat   = a.category || '기타';
@@ -717,7 +723,9 @@ function renderCard(a) {
   const titleH = hl(a.title || '제목 없음', S.query);
   const sumH   = hl(sum.substring(0, 130), S.query);
   const isNewItem = isNew(a.crawled_at || a.published_at);
+  const isUrgentItem = checkUrgent(a.title || '');
   const readClass = isRead(a.id) ? ' card-read' : '';
+  const urgentClass = isUrgentItem ? ' card-urgent' : '';
   const bmClass   = isBookmarked(a.id) ? ' bookmarked' : '';
 
   const srcIcons = {
@@ -726,10 +734,11 @@ function renderCard(a) {
     '전문지': 'ti-news',
   };
   const srcIcon = srcIcons[a.source_category] || 'ti-news';
+  const urgentBadge = isUrgentItem ? '<span class="urgent-badge"><i class="ti ti-siren"></i>긴급</span>' : '';
 
   if (S.viewMode === 'list') {
     return `
-    <div class="news-card list-card${readClass}" data-id="${a.id}" data-cat="${cat}" tabindex="0" role="button"
+    <div class="news-card list-card${readClass}${urgentClass}" data-id="${a.id}" data-cat="${cat}" tabindex="0" role="button"
       style="--cat-color:${meta.dot};--tag-bg:${meta.bg};--tag-color:${meta.color}">
       <div class="card-left">
         <span class="cat-tag">${cat}</span>
@@ -739,6 +748,7 @@ function renderCard(a) {
         <div class="card-header" style="margin-bottom:5px">
           <span class="src-tag"><i class="ti ${srcIcon}"></i>${a.source || ''}</span>
           ${isNewItem ? '<span class="new-badge">NEW</span>' : ''}
+          ${urgentBadge}
         </div>
         <p class="card-title">${titleH}</p>
         ${sumH ? `<p class="card-summary" style="margin-top:4px">${sumH}${sum.length > 130 ? '…' : ''}</p>` : ''}
@@ -750,12 +760,13 @@ function renderCard(a) {
   }
 
   return `
-  <div class="news-card${readClass}" data-id="${a.id}" data-cat="${cat}" tabindex="0" role="button"
+  <div class="news-card${readClass}${urgentClass}" data-id="${a.id}" data-cat="${cat}" tabindex="0" role="button"
     style="--cat-color:${meta.dot};--tag-bg:${meta.bg};--tag-color:${meta.color}">
     <div class="card-header">
       <span class="cat-tag">${cat}</span>
       <span class="src-tag"><i class="ti ${srcIcon}"></i>${a.source || ''}</span>
       ${isNewItem ? '<span class="new-badge">NEW</span>' : ''}
+      ${urgentBadge}
       <button class="card-bm-btn${bmClass}" data-id="${a.id}" title="${isBookmarked(a.id) ? '북마크 해제' : '북마크'}" style="margin-left:auto">
         <i class="ti ${isBookmarked(a.id) ? 'ti-bookmark-filled' : 'ti-bookmark'}"></i>
       </button>
@@ -1556,541 +1567,247 @@ function updateLiveText() {
   if (el) el.textContent = `\ucd5c\uc885 ${relTime(_lastCrawlKST)}`;
 }
 
-// ── 연도 옵션 초기화 ─────────────────────────────────────────
-async function initYearOpts() {
-  const data = await apiFetch('/api/filters');
+
+// ── 대시보드 KPI 카드 로드 ─────────────────────────────────────
+async function loadDashboardKPI() {
+  const data = await apiFetch('/api/stats/today-summary');
   if (!data?.success) return;
-  const { dateRange } = data.data;
-  if (!dateRange) return;
-  const minY = parseInt((dateRange.minDate || '2020').substring(0, 4));
-  const maxY = parseInt((dateRange.maxDate || '').substring(0, 4)) || new Date().getFullYear();
-  const opts = [];
-  for (let y = maxY; y >= minY; y--) opts.push(`<option value="${y}">${y}년</option>`);
-  ['#advYear', '#advMonthYear'].forEach(id => {
+  const d = data.data;
+  const setKPI = (id, val) => { const el = $(id); if (el) el.textContent = (val || 0).toLocaleString(); };
+  setKPI('#dkpiTotalVal',    d.total);
+  setKPI('#dkpiTodayVal',    d.today);
+  setKPI('#dkpiDisasterVal', d.todayDisaster);
+  setKPI('#dkpiWeekVal',     d.week);
+  const kpiMap = [
+    { id: '#dkpiTotal',    fn: () => { S.category='all'; S.quickPeriod=null; doSearch(); } },
+    { id: '#dkpiToday',    fn: () => { $('#chipToday')?.click(); } },
+    { id: '#dkpiDisaster', fn: () => { S.category='중대재해'; switchTab('disaster'); doSearch(); } },
+    { id: '#dkpiWeek',     fn: () => { $('#chipWeek')?.click(); } },
+  ];
+  kpiMap.forEach(({ id, fn }) => {
     const el = $(id);
-    if (el) el.innerHTML = `<option value="">연도 선택</option>${opts.join('')}`;
+    if (!el || el._kpiBound) return;
+    el._kpiBound = true; el.style.cursor = 'pointer';
+    el.addEventListener('click', fn);
   });
 }
 
-// ── 탭 전환 ──────────────────────────────────────────────────
-function switchTab(tab) {
-  S.tab = tab;
-  S.page = 1;
-  S.category = 'all';
-  S.source   = 'all';
-  S.query    = '';
-  S.quickPeriod = null;
-  S.crawledFrom = ''; S.crawledTo = '';
-  S.advFrom = ''; S.advTo = ''; S.advYear = ''; S.advMonth = ''; S.advDay = ''; S.advHour = '';
-
-  const titles = {
-    latest:    '전체 최신 기사',
-    disaster:  '중대재해',
-    safety:    '산업재해·안전',
-    law:       '법령·제도',
-    policy:    '정책·브리핑',
-    health:    '직업보건·화학',
-    kosha:     '기관 동향',
-    bookmarks: '북마크한 기사',
-  };
-  const titleEl = $('#pageTitle');
-  if (titleEl) titleEl.textContent = titles[tab] || '전체 최신 기사';
-
-  $$('.nav-item').forEach(li => li.classList.toggle('active', li.dataset.tab === tab));
-
-  const sel = $('#selCategory');
-  if (sel) {
-    if (TAB_CAT[tab]) sel.value = TAB_CAT[tab];
-    else sel.value = 'all';
+// ── 카테고리 도넛 차트 ─────────────────────────────────────────
+const DONUT_COLORS = {
+  '중대재해': '#ef4444', '산업재해·안전': '#f97316',
+  '법령·제도': '#3b82f6', '정책·브리핑': '#10b981',
+  '직업보건·화학': '#8b5cf6', '기관동향': '#64748b',
+};
+async function loadDonutChart() {
+  const data = await apiFetch('/api/stats/categories');
+  if (!data?.success) return;
+  const cats = data.data;
+  const total = cats.reduce((s, c) => s + c.count, 0);
+  const el = $('#donutChart');
+  if (!el) return;
+  const catOrder = ['중대재해','산업재해·안전','법령·제도','정책·브리핑','직업보건·화학','기관동향'];
+  const vals = catOrder.map(name => cats.find(c => c.category === name)?.count || 0);
+  const colors = catOrder.map(name => DONUT_COLORS[name] || '#94a3b8');
+  const ctx = el.getContext('2d');
+  const W = el.width, H = el.height;
+  const cx = W/2, cy = H/2, r = Math.min(W,H)/2 - 8, ri = r * 0.58;
+  ctx.clearRect(0, 0, W, H);
+  let startAngle = -Math.PI / 2;
+  vals.forEach((v, i) => {
+    if (v === 0) return;
+    const slice = (v / total) * 2 * Math.PI;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startAngle, startAngle + slice);
+    ctx.closePath(); ctx.fillStyle = colors[i]; ctx.fill();
+    startAngle += slice;
+  });
+  ctx.beginPath(); ctx.arc(cx, cy, ri, 0, 2 * Math.PI);
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface-2').trim() || '#1e293b';
+  ctx.fill();
+  const centerEl = $('#donutCenterVal');
+  if (centerEl) centerEl.textContent = total.toLocaleString();
+  const legend = $('#donutLegend');
+  if (legend) {
+    legend.innerHTML = catOrder.map((name, i) => {
+      const cnt = vals[i]; if (cnt === 0) return '';
+      const pct = total > 0 ? ((cnt / total) * 100).toFixed(1) : '0';
+      return `<li class="donut-legend-item" data-cat="${name}">
+        <span class="donut-dot" style="background:${colors[i]}"></span>
+        <span class="donut-name">${name}</span>
+        <span class="donut-cnt">${cnt.toLocaleString()} <small>(${pct}%)</small></span>
+      </li>`;
+    }).join('');
+    $$('.donut-legend-item', legend).forEach(li => {
+      li.style.cursor = 'pointer';
+      li.addEventListener('click', () => {
+        S.category = li.dataset.cat;
+        const sel = $('#selCategory'); if (sel) sel.value = li.dataset.cat;
+        S.tab = 'latest';
+        $$('.nav-item').forEach(x => x.classList.remove('active'));
+        $('[data-tab="latest"]')?.classList.add('active');
+        doSearch();
+      });
+    });
   }
-
-  const gs = $('#globalSearch');
-  if (gs) gs.value = '';
-
-  $$('.chip').forEach(c => c.classList.remove('active'));
-  $('#chipAll')?.classList.add('active');
-
-  doSearch();
 }
 
-// ── 빠른 기간 칩 ─────────────────────────────────────────────
-function setQuick(period) {
-  S.quickPeriod = period;
-  S.advFrom = ''; S.advTo = ''; S.advYear = ''; S.advMonth = ''; S.advDay = ''; S.advHour = '';
-  $$('.chip').forEach(c => c.classList.remove('active'));
-  const map = { all: '#chipAll', today: '#chipToday', week: '#chipWeek', month: '#chipMonth' };
-  $(map[period] || '#chipAll')?.classList.add('active');
-  doSearch();
-}
-
-// ── 날짜 입력 유틸 ─────────────────────────────────────────────
-function setupDateInput(inputEl) {
-  if (!inputEl) return;
-
-  inputEl.addEventListener('input', (e) => {
-    let v = e.target.value.replace(/[^\d\-]/g, '');
-    const nums = v.replace(/-/g, '');
-    if (nums.length >= 5 && !v.includes('-')) {
-      v = `${nums.substring(0,4)}-${nums.substring(4,6)}${nums.length > 6 ? '-' + nums.substring(6,8) : ''}`;
-    }
-    e.target.value = v;
+// ── 일별 트렌드 바 차트 ────────────────────────────────────────
+async function loadTrendChart(days) {
+  const data = await apiFetch(`/api/stats/daily-trend?days=${days}`);
+  if (!data?.success) return;
+  const rows = data.data;
+  const el = $('#trendChart');
+  if (!el || rows.length === 0) return;
+  const ctx = el.getContext('2d');
+  const W = el.parentElement?.clientWidth || 400;
+  const H = el.height;
+  el.width = W; ctx.clearRect(0, 0, W, H);
+  const totals = rows.map(r => r.total);
+  const maxVal = Math.max(...totals, 1);
+  const barW = Math.max(4, Math.floor((W - 30) / Math.max(rows.length,1)) - 2);
+  const padL = 28, padB = 22, padT = 10;
+  const chartH = H - padT - padB; const chartW = W - padL;
+  ctx.strokeStyle = 'rgba(148,163,184,0.15)'; ctx.lineWidth = 1;
+  [0.25, 0.5, 0.75, 1].forEach(p => {
+    const y = padT + chartH * (1 - p);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W, y); ctx.stroke();
   });
-
-  inputEl.addEventListener('blur', (e) => {
-    const v = e.target.value;
-    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
-      e.target.classList.add('date-error');
-    } else {
-      e.target.classList.remove('date-error');
-    }
-  });
-}
-
-// ── 고급 날짜 탭 ─────────────────────────────────────────────
-function initAdvTabs() {
-  $$('.adv-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      S.advTab = btn.dataset.atab;
-      $$('.adv-tab').forEach(b => b.classList.remove('active'));
-      $$('.adv-tab-body').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      $(`#atab-${S.advTab}`)?.classList.add('active');
-    });
-  });
-
-  const toggleAdv = () => {
-    $('#advPanel').classList.toggle('open');
-    $$('#btnAdvDate, #btnAdvDate2').forEach(b => b.classList.toggle('active'));
-  };
-  $('#btnAdvDate')?.addEventListener('click', toggleAdv);
-  $('#btnAdvDate2')?.addEventListener('click', toggleAdv);
-
-  ['#advFrom', '#advTo', '#dateFrom', '#dateTo'].forEach(id => {
-    setupDateInput($(id));
-  });
-
-  $('#btnAdvApply')?.addEventListener('click', () => {
-    const at = S.advTab;
-    if (at === 'range') {
-      S.advFrom = $('#advFrom')?.value || '';
-      S.advTo   = $('#advTo')?.value   || '';
-      if (S.advFrom && !/^\d{4}-\d{2}-\d{2}$/.test(S.advFrom)) {
-        toast('시작 날짜 형식이 올바르지 않습니다. (YYYY-MM-DD)', 'error');
-        return;
-      }
-      if (S.advTo && !/^\d{4}-\d{2}-\d{2}$/.test(S.advTo)) {
-        toast('종료 날짜 형식이 올바르지 않습니다. (YYYY-MM-DD)', 'error');
-        return;
-      }
-    } else if (at === 'year') {
-      S.advYear = $('#advYear')?.value || '';
-    } else if (at === 'month') {
-      S.advYear  = $('#advMonthYear')?.value || '';
-      S.advMonth = $('#advMonth')?.value     || '';
-    } else if (at === 'day') {
-      S.advDay = $('#advDay')?.value || '';
-      if (S.advDay && !/^\d{4}-\d{2}-\d{2}$/.test(S.advDay)) {
-        toast('날짜 형식이 올바르지 않습니다. (YYYY-MM-DD)', 'error');
-        return;
-      }
-    } else if (at === 'hour') {
-      S.advDay  = $('#advHourDate')?.value || '';
-      S.advHour = $('#advHour')?.value     || '';
-    }
-    S.quickPeriod = null;
-    $$('.chip').forEach(c => c.classList.remove('active'));
-    $('#chipAll')?.classList.add('active');
-    doSearch();
-  });
-}
-
-// ── 모바일 햄버거 메뉴 ───────────────────────────────────────
-// 모바일 (900px 이하) 사이드바 슬라이드 인/아웃
-function initMobileMenu() {
-  const hamburger = $('#hamburger');
-  const sidebar   = $('#sidebar');
-  const sbOverlay = $('#sidebarOverlay');
-
-  if (!hamburger || !sidebar) return;
-
-  const isMobile = () => window.innerWidth <= 900;
-  let scrollY = 0;
-
-  const open = () => {
-    // iOS 스크롤 고정: position:fixed 전에 스크롤 위치 저장
-    scrollY = window.scrollY;
-    document.body.style.top = `-${scrollY}px`;
-    sidebar.classList.add('mobile-open');
-    sbOverlay.classList.add('open');
-    document.body.classList.add('sidebar-active');
-    hamburger.classList.add('is-open');
-    hamburger.setAttribute('aria-label', '메뉴 닫기');
-    hamburger.setAttribute('aria-expanded', 'true');
-  };
-
-  const close = () => {
-    sidebar.classList.remove('mobile-open');
-    sbOverlay.classList.remove('open');
-    document.body.classList.remove('sidebar-active');
-    // iOS 스크롤 위치 복원
-    document.body.style.top = '';
-    window.scrollTo(0, scrollY);
-    hamburger.classList.remove('is-open');
-    hamburger.setAttribute('aria-label', '메뉴 열기');
-    hamburger.setAttribute('aria-expanded', 'false');
-  };
-
-  hamburger.addEventListener('click', () => {
-    if (sidebar.classList.contains('mobile-open')) close(); else open();
-  });
-
-  sbOverlay.addEventListener('click', close);
-
-  // 사이드바 내 탭 클릭 시 모바일에서 자동 닫기
-  $$('.nav-item', sidebar).forEach(li => {
-    li.addEventListener('click', () => {
-      if (isMobile()) close();
-    });
-  });
-
-  // 터치 스와이프 지원 (사이드바에서 왼쪽으로 60px 이상 스와이프 시 닫기)
-  let touchStartX = 0;
-  sidebar.addEventListener('touchstart', e => {
-    touchStartX = e.touches[0].clientX;
-  }, { passive: true });
-  sidebar.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    if (dx < -60) close();
-  }, { passive: true });
-
-  // 화면 크기 변경 시 900px 초과 → 자동 닫기
-  window.addEventListener('resize', () => {
-    if (window.innerWidth > 900 && sidebar.classList.contains('mobile-open')) close();
-  });
-
-  // ESC 키로 닫기 (drawer close와 중복 방지: drawer가 닫혀있을 때만)
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && sidebar.classList.contains('mobile-open')) close();
-  });
-}
-
-// ── 이벤트 바인딩 ────────────────────────────────────────────
-function bindEvents() {
-  // 글로벌 검색 (Enter) → autocomplete에서 처리됨 (initSearchAutocomplete)
-
-  // 필터 검색 버튼
-  $('#btnSearch')?.addEventListener('click', () => {
-    S.query    = $('#globalSearch')?.value.trim() || '';
-    S.category = $('#selCategory')?.value || 'all';
-    S.source   = $('#selSource')?.value   || 'all';
-    S.dateFrom = $('#dateFrom')?.value    || '';
-    S.dateTo   = $('#dateTo')?.value      || '';
-    S.advTab   = 'range';
-    S.quickPeriod = null;
-
-    if (S.dateFrom && !/^\d{4}-\d{2}-\d{2}$/.test(S.dateFrom)) {
-      toast('시작 날짜 형식: YYYY-MM-DD', 'error'); return;
-    }
-    if (S.dateTo && !/^\d{4}-\d{2}-\d{2}$/.test(S.dateTo)) {
-      toast('종료 날짜 형식: YYYY-MM-DD', 'error'); return;
-    }
-
-    if (S.query) pushSearchHist(S.query);
-
-    if (S.category && S.category !== 'all') {
-      const matchTab = Object.entries(TAB_CAT).find(([,v]) => v === S.category);
-      if (matchTab) {
-        $$('.nav-item').forEach(li => li.classList.toggle('active', li.dataset.tab === matchTab[0]));
-      }
-    }
-
-    doSearch();
-  });
-
-  // 필터 초기화
-  $('#btnReset')?.addEventListener('click', () => {
-    const gs = $('#globalSearch'); if (gs) gs.value = '';
-    const sc = $('#selCategory'); if (sc) sc.value = 'all';
-    const ss = $('#selSource');   if (ss) ss.value = 'all';
-    const df = $('#dateFrom');    if (df) df.value = '';
-    const dt = $('#dateTo');      if (dt) dt.value = '';
-    ['#advFrom','#advTo','#advDay','#advHourDate'].forEach(id => {
-      const el = $(id); if (el) el.value = '';
-    });
-    const advYear = $('#advYear'); if (advYear) advYear.value = '';
-    const advMonthYear = $('#advMonthYear'); if (advMonthYear) advMonthYear.value = '';
-    const advMonth = $('#advMonth'); if (advMonth) advMonth.value = '';
-    const advHour = $('#advHour'); if (advHour) advHour.value = '';
-
-    Object.assign(S, {
-      query:'', category:'all', source:'all',
-      dateFrom:'', dateTo:'', crawledFrom:'', crawledTo:'',
-      advFrom:'', advTo:'',
-      advYear:'', advMonth:'', advDay:'', advHour:'',
-      advTab:'range', quickPeriod:null, page:1,
-    });
-    $$('.chip').forEach(c => c.classList.remove('active'));
-    $('#chipAll')?.classList.add('active');
-    $$('.nav-item').forEach(li => li.classList.toggle('active', li.dataset.tab === 'latest'));
-    S.tab = 'latest';
-    const titleEl = $('#pageTitle');
-    if (titleEl) titleEl.textContent = '전체 최신 기사';
-    $$('.cat-item').forEach(x => x.classList.remove('active'));
-    doSearch();
-  });
-
-  // 카테고리 / 출처 셀렉트 변경
-  $('#selCategory')?.addEventListener('change', e => {
-    S.category = e.target.value;
-    if (S.category !== 'all') {
-      const matchTab = Object.entries(TAB_CAT).find(([,v]) => v === S.category);
-      if (matchTab) {
-        S.tab = matchTab[0];
-        $$('.nav-item').forEach(li => li.classList.toggle('active', li.dataset.tab === matchTab[0]));
-        const titleEl = $('#pageTitle');
-        if (titleEl) {
-          const titles = {disaster:'중대재해',safety:'산업재해·안전',law:'법령·제도',policy:'정책·브리핑',health:'직업보건·화학',kosha:'기관 동향'};
-          titleEl.textContent = titles[matchTab[0]] || S.category;
-        }
-      }
-    } else {
-      S.tab = 'latest';
-      $$('.nav-item').forEach(li => li.classList.toggle('active', li.dataset.tab === 'latest'));
-      const titleEl = $('#pageTitle');
-      if (titleEl) titleEl.textContent = '전체 최신 기사';
-    }
-    doSearch();
-  });
-  $('#selSource')?.addEventListener('change', e => { S.source = e.target.value; doSearch(); });
-
-  // 정렬 / 페이지 수
-  $('#sortOrder')?.addEventListener('change', () => doSearch());
-  $('#pageSize')?.addEventListener('change', e => { S.pageSize = +e.target.value; doSearch(); });
-
-  // 뷰 토글
-  $('#viewCard')?.addEventListener('click', () => {
-    S.viewMode = 'card';
-    $('#viewCard').classList.add('active');
-    $('#viewList')?.classList.remove('active');
-    const feed = $('#newsFeed');
-    if (feed) { feed.classList.remove('list-view'); loadFeed(); }
-  });
-  $('#viewList')?.addEventListener('click', () => {
-    S.viewMode = 'list';
-    $('#viewList').classList.add('active');
-    $('#viewCard')?.classList.remove('active');
-    const feed = $('#newsFeed');
-    if (feed) { feed.classList.add('list-view'); loadFeed(); }
-  });
-
-  // 사이드바 탭 내비 (북마크 포함)
-  $$('.nav-item').forEach(li => {
-    li.addEventListener('click', () => switchTab(li.dataset.tab));
-  });
-
-  // 빠른 기간 칩
-  $('#chipAll')?.addEventListener('click',   () => setQuick('all'));
-  $('#chipToday')?.addEventListener('click', () => setQuick('today'));
-  $('#chipWeek')?.addEventListener('click',  () => setQuick('week'));
-  $('#chipMonth')?.addEventListener('click', () => setQuick('month'));
-
-  // 수동 업데이트 공통 핸들러 (topbar + 모바일 사이드바 버튼 공용)
-  async function doCrawlUpdate(btn) {
-    if (!btn || btn.disabled) return;
-
-    // 두 버튼 모두 로딩 상태로
-    const btnTop    = $('#btnCrawl');
-    const btnMobile = $('#btnCrawlMobile');
-    [btnTop, btnMobile].forEach(b => { if (b) { b.classList.add('loading'); b.disabled = true; } });
-
-    const span = btn.querySelector('span');
-    const setLabel = t => {
-      if (span) span.textContent = t;
-      // 반대쪽 버튼 span도 동기화
-      const other = btn === btnTop ? btnMobile : btnTop;
-      if (other) { const s = other.querySelector('span'); if (s) s.textContent = t; }
+  rows.forEach((r, i) => {
+    const x = padL + i * (chartW / rows.length) + (chartW / rows.length - barW) / 2;
+    let stackY = padT + chartH;
+    const drawSeg = (val, color) => {
+      if (val <= 0) return;
+      const sh = (val / maxVal) * chartH; stackY -= sh;
+      ctx.fillStyle = color; ctx.fillRect(x, stackY, barW, sh);
     };
-
-    setLabel('크롤링 시작 중...');
-    toast('업데이트를 시작합니다. 완료 시 자동으로 결과가 반영됩니다.', 'info', 4000);
-
-    const resetBtns = () => {
-      [btnTop, btnMobile].forEach(b => { if (b) { b.classList.remove('loading'); b.disabled = false; } });
-      setLabel('지금 업데이트');
-    };
-
-    try {
-      const startRes = await fetch('/api/crawl/run', { method: 'POST' });
-      const startData = await startRes.json().catch(() => ({}));
-
-      if (!startData.success && startData.message?.includes('진행 중')) {
-        toast('이미 크롤링이 진행 중입니다. 잠시 후 다시 시도하세요.', 'info');
-        resetBtns();
-        return;
-      }
-
-      setLabel('수집 중...');
-      let elapsed = 0;
-      const pollInterval = 3000;
-      const maxWait = 120000;
-
-      const poll = async () => {
-        elapsed += pollInterval;
-        const statusData = await apiFetch('/api/crawl/status');
-        const isRunning = statusData?.data?.isRunning;
-
-        if (!isRunning || elapsed >= maxWait) {
-          // ── 크롤 완료 후 필터 완전 리셋 → 새 기사가 바로 보이도록 ──
-          S.tab         = 'latest';
-          S.page        = 1;
-          S.category    = 'all';
-          S.source      = 'all';
-          S.query       = '';
-          S.quickPeriod = null;
-          S.crawledFrom = ''; S.crawledTo = '';
-          S.dateFrom    = ''; S.dateTo    = '';
-          S.advFrom     = ''; S.advTo     = '';
-          S.advYear     = ''; S.advMonth  = ''; S.advDay = ''; S.advHour = '';
-
-          // UI 동기화: 검색창·칩·탭 초기화
-          const gs = $('#globalSearch');
-          if (gs) gs.value = '';
-          $$('.chip').forEach(c => c.classList.remove('active'));
-          $('#chipAll')?.classList.add('active');
-          $$('.nav-item').forEach(li => li.classList.toggle('active', li.dataset.tab === 'latest'));
-          const titleEl = $('#pageTitle');
-          if (titleEl) titleEl.textContent = '전체 최신 기사';
-          const sel = $('#selCategory');
-          if (sel) sel.value = 'all';
-
-          await loadDashboard();
-          doSearch();          // 리셋된 상태로 최신 기사 전체 재조회
-          resetBtns();
-          if (elapsed >= maxWait) {
-            toast('업데이트 시간이 초과됐습니다. 결과를 확인하세요.', 'info');
-          } else {
-            toast('업데이트 완료! 새 기사가 반영됐습니다.', 'success');
-          }
-          refreshTicker();
-          drawKwTrend();
-          await loadKwCache();
-        } else {
-          const sec = Math.round(elapsed / 1000);
-          setLabel(`수집 중... (${sec}초)`);
-          setTimeout(poll, pollInterval);
-        }
-      };
-
-      setTimeout(poll, 4000);
-
-    } catch (e) {
-      console.error('[크롤링] 오류:', e);
-      resetBtns();
-      toast('업데이트 요청 실패. 네트워크를 확인하세요.', 'error');
+    drawSeg(r.disaster || 0, '#ef4444cc');
+    drawSeg(r.safety || 0,   '#f97316cc');
+    drawSeg((r.law||0) + (r.policy||0) + (r.health||0) + (r.agency||0), '#3b82f6aa');
+    if (i % Math.max(1, Math.floor(rows.length / 7)) === 0) {
+      ctx.fillStyle = '#94a3b8'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText((r.day||'').substring(5), x + barW/2, H - 4);
     }
-  }
-
-  // 탑바 업데이트 버튼
-  $('#btnCrawl')?.addEventListener('click', () => doCrawlUpdate($('#btnCrawl')));
-  // 모바일 사이드바 업데이트 버튼
-  $('#btnCrawlMobile')?.addEventListener('click', () => doCrawlUpdate($('#btnCrawlMobile')));
-
-  // 드로어 닫기
-  $('#drawerClose')?.addEventListener('click', closeDrawer);
-  $('#overlay')?.addEventListener('click', closeDrawer);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeDrawer(); closeShareModal(); } });
-
-  // 엑셀 다운로드 버튼
-  $('#btnExcelDown')?.addEventListener('click', downloadExcel);
+  });
+  ctx.fillStyle = '#94a3b8'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+  ctx.fillText(maxVal, padL - 2, padT + 8); ctx.fillText(0, padL - 2, H - padB + 6);
 }
 
-// ── 엑셀 다운로드 ────────────────────────────────────────────
-async function downloadExcel() {
-  const qs = new URLSearchParams();
-  const p  = buildParams();
-  Object.entries(p).forEach(([k,v]) => {
-    if (v !== undefined && v !== '' && v !== 'all') qs.set(k, v);
-  });
-  qs.set('page', 1);
-  qs.set('limit', S.pageSize);
-  const sort = $('#sortOrder')?.value || 'latest';
-  if (sort === 'oldest') qs.set('sort', 'oldest');
-
-  toast('엑셀 파일을 준비 중입니다...', 'info', 2000);
-
-  const data = await apiFetch(`/api/articles?${qs}`);
+// ── 긴급 모니터링 기사 ─────────────────────────────────────────
+async function loadUrgentList() {
+  const data = await apiFetch('/api/articles/urgent?limit=6');
+  const el = $('#urgentList');
+  if (!el) return;
   if (!data?.success || !data.data?.length) {
-    toast('다운로드할 데이터가 없습니다.', 'error');
+    el.innerHTML = '<li class="urgent-empty"><i class="ti ti-check-circle" style="color:var(--success-400)"></i> 현재 긴급 기사 없음</li>';
     return;
   }
+  el.innerHTML = data.data.map(a => `
+    <li class="urgent-item" data-id="${a.id}">
+      <div class="urgent-item-meta">
+        <span class="urgent-cat">${a.category||'기타'}</span>
+        <span class="urgent-time">${relTime(a.published_at)}</span>
+      </div>
+      <p class="urgent-title-text">${a.title}</p>
+    </li>`).join('');
+  $$('.urgent-item', el).forEach(li => li.addEventListener('click', () => openDrawer(parseInt(li.dataset.id))));
+}
 
-  const rows = data.data;
+// ── 위험 업종별 통계 ──────────────────────────────────────────
+async function loadIndustryStats() {
+  const data = await apiFetch('/api/stats/industry?days=30');
+  const el = $('#industryList');
+  if (!el || !data?.success) return;
+  const rows = data.data.filter(r => r.cnt > 0).slice(0, 7);
+  if (!rows.length) { el.innerHTML = '<li class="industry-empty">데이터 없음</li>'; return; }
+  const maxCnt = rows[0].cnt;
+  const colors = ['#ef4444','#f97316','#f59e0b','#10b981','#3b82f6','#8b5cf6','#64748b'];
+  el.innerHTML = rows.map((r, i) => {
+    const pct = maxCnt > 0 ? Math.round((r.cnt / maxCnt) * 100) : 0;
+    return `<li class="industry-item">
+      <div class="industry-item-head">
+        <span class="industry-rank">${i+1}</span>
+        <span class="industry-name">${r.industry}</span>
+        <span class="industry-cnt">${r.cnt}</span>
+      </div>
+      <div class="industry-bar-wrap">
+        <div class="industry-bar" style="width:${pct}%;background:${colors[i]||'#64748b'}"></div>
+      </div>
+    </li>`;
+  }).join('');
+}
 
-  const BOM = '\uFEFF';
-  const cols = [
-    { key: 'id',           label: 'ID',           fmt: v => v },
-    { key: 'category',     label: '분류',          fmt: v => v },
-    { key: 'source',       label: '출처',          fmt: v => v },
-    { key: 'title',        label: '제목',          fmt: v => v },
-    { key: 'summary',      label: '요약',          fmt: v => v },
-    { key: 'keywords',     label: '키워드',        fmt: v => v },
-    { key: 'author',       label: '작성자',        fmt: v => v },
-    { key: 'published_at', label: '입력일시(KST)', fmt: v => v ? fmtFull2(v) : '' },
-    { key: 'url',          label: '원문URL',       fmt: v => v },
-  ];
+// ── 지역별 사고 현황 ──────────────────────────────────────────
+async function loadRegionStats() {
+  const data = await apiFetch('/api/stats/region?days=30');
+  const el = $('#regionList');
+  if (!el || !data?.success) return;
+  const rows = data.data.slice(0, 8);
+  if (!rows.length) { el.innerHTML = '<div class="region-empty">지역 데이터 없음</div>'; return; }
+  const maxCnt = rows[0].cnt;
+  el.innerHTML = rows.map(r => {
+    const pct = maxCnt > 0 ? Math.round((r.cnt / maxCnt) * 100) : 0;
+    const level = pct >= 80 ? 'danger' : pct >= 50 ? 'warning' : 'normal';
+    return `<div class="region-item" data-region="${r.region}">
+      <div class="region-item-head">
+        <span class="region-name"><i class="ti ti-map-pin"></i>${r.region}</span>
+        <span class="region-badge region-badge-${level}">${r.cnt}건</span>
+      </div>
+      <div class="region-bar-wrap">
+        <div class="region-bar region-bar-${level}" style="width:${pct}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+  $$('.region-item', el).forEach(div => {
+    div.style.cursor = 'pointer';
+    div.addEventListener('click', () => { S.query = div.dataset.region; const gs = $('#globalSearch'); if (gs) gs.value = div.dataset.region; doSearch(); });
+  });
+}
 
-  const escCell = v => {
-    if (v == null) return '';
-    const s = String(v).replace(/\r?\n/g, ' ');
-    return (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes(';'))
-      ? `"${s.replace(/"/g, '""')}"`
-      : s;
-  };
+// ── 대시보드 전체 로드 ────────────────────────────────────────
+async function loadNewDashboard() {
+  await Promise.allSettled([loadDashboardKPI(), loadDonutChart(), loadUrgentList(), loadIndustryStats(), loadRegionStats()]);
+  await loadTrendChart(14);
+  $$('.trend-btn').forEach(btn => {
+    if (btn._trendBound) return; btn._trendBound = true;
+    btn.addEventListener('click', async () => {
+      $$('.trend-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+      await loadTrendChart(parseInt(btn.dataset.days));
+    });
+  });
+}
 
-  const header = cols.map(c => c.label).join(',');
-  const body   = rows.map(r =>
-    cols.map(c => escCell(c.fmt ? c.fmt(r[c.key]) : r[c.key])).join(',')
-  ).join('\n');
-
-  const csv  = BOM + header + '\n' + body;
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const now  = new Date();
-  const ts   = `${now.getFullYear()}${zp(now.getMonth()+1)}${zp(now.getDate())}_${zp(now.getHours())}${zp(now.getMinutes())}`;
-  link.href     = URL.createObjectURL(blob);
-  link.download = `KOSHA_모니터링_${ts}_${rows.length}건.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
-
-  toast(`총 ${rows.length}건 엑셀 다운로드 완료`, 'success');
+// ── 대시보드 토글 ─────────────────────────────────────────────
+let _dashOpen = true;
+function initDashToggle() {
+  const btn = $('#dashToggleBtn'); const panel = $('#dashboardPanel');
+  if (!btn || !panel) return;
+  btn.addEventListener('click', () => {
+    _dashOpen = !_dashOpen;
+    panel.style.display = _dashOpen ? '' : 'none';
+    const icon = $('#dashToggleIcon'); const label = $('#dashToggleLabel');
+    if (icon) icon.className = `ti ${_dashOpen ? 'ti-chevron-up' : 'ti-chevron-down'}`;
+    if (label) label.textContent = _dashOpen ? '대시보드 접기' : '대시보드 펼치기';
+  });
 }
 
 // ── 자동 새로고침 ──────────────────────────────────────────────
 function startAutoRefresh() {
-  // 1분마다: 상대시간("최종 N분 전") 업데이트 + 카드 시간 갱신
+  // 1분마다: 상대시간 + 카드 시간 갱신
   setInterval(() => {
     updateLiveText();
-    // 피드 카드의 card-time 요소들도 갱신 (아이콘 유지)
     $$('.card-time[data-published]').forEach(el => {
-      const t = el.dataset.published;
-      if (!t) return;
+      const t = el.dataset.published; if (!t) return;
       const icon = el.querySelector('i');
-      if (icon) {
-        // 아이콘 뒤 텍스트만 업데이트
-        icon.nextSibling ? icon.nextSibling.textContent = relTime(t)
-                         : el.appendChild(document.createTextNode(relTime(t)));
-      } else {
-        el.textContent = relTime(t);
-      }
+      if (icon) { icon.nextSibling ? icon.nextSibling.textContent = relTime(t) : el.appendChild(document.createTextNode(relTime(t))); }
+      else { el.textContent = relTime(t); }
     });
   }, 60 * 1000);
 
-  // 5분마다: 대시보드 전체 갱신 + 최신 탭이면 피드도 갱신
+  // 5분마다: 대시보드 전체 갱신 + 피드 갱신
   setInterval(async () => {
     await loadDashboard();
-    if (S.tab === 'latest' && S.page === 1 && !S.query && !S.quickPeriod && !S.crawledFrom) {
-      await loadFeed();
-    }
+    await loadNewDashboard();
+    if (S.tab === 'latest' && S.page === 1 && !S.query && !S.quickPeriod && !S.crawledFrom) await loadFeed();
     drawKwTrend();
   }, 5 * 60 * 1000);
 }
@@ -2098,28 +1815,24 @@ function startAutoRefresh() {
 // ── 초기화 ──────────────────────────────────────────────────
 async function init() {
   console.log('[KOSHA Monitor] 초기화 시작');
-
   bindEvents();
   initAdvTabs();
   initMobileMenu();
   initSearchAutocomplete();
+  initDashToggle();
 
   await loadDashboard();
   await initYearOpts();
   await loadKwCache();
 
-  // 스파크라인은 loadDashboard 내부에서 호출됨
-  drawKwTrend();
+  // 대시보드 위젯 로드 (KPI, 도넛, 트렌드, 긴급, 업종, 지역)
+  loadNewDashboard();
 
+  drawKwTrend();
   $('#chipAll')?.classList.add('active');
   doSearch();
-
-  // 북마크 배지 초기화
   updateBookmarkBadge();
-
-  // 속보 티커 초기화
   initTicker();
-
   startAutoRefresh();
   console.log('[KOSHA Monitor] 초기화 완료');
 }

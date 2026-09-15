@@ -80,29 +80,31 @@ async function runAllCrawlers() {
   }
 }
 
-// 다음 정각 시간 계산 (UTC 기준)
-function calcNextHour() {
+// 다음 30분 단위 시간 계산
+function calcNext30Min() {
   const next = new Date();
-  next.setUTCMinutes(0);
+  // 현재 분을 기준으로 다음 0분 또는 30분을 구함
+  const m = next.getUTCMinutes();
+  const addMin = m < 30 ? (30 - m) : (60 - m);
+  next.setUTCMinutes(next.getUTCMinutes() + addMin);
   next.setUTCSeconds(0);
   next.setUTCMilliseconds(0);
-  next.setUTCHours(next.getUTCHours() + 1);
   return next.toISOString();
 }
 
-// 1시간마다 자동 크롤링 (매시 정각 UTC)
+// 30분마다 자동 크롤링 (매시 0분·30분)
 function startScheduler() {
-  // 매시 0분 0초 (UTC) 실행 – node-cron은 서버 로컬 타임존 기준
-  cron.schedule('0 * * * *', async () => {
-    console.log(`[스케줄러] 정기 크롤링 시작 (매시간) – ${new Date().toISOString()}`);
-    nextRunTime = calcNextHour();
+  // 매시 0분·30분 실행 (node-cron 서버 로컬 타임존 기준)
+  cron.schedule('*/30 * * * *', async () => {
+    console.log(`[스케줄러] 정기 크롤링 시작 (30분 주기) – ${new Date().toISOString()}`);
+    nextRunTime = calcNext30Min();
     await runAllCrawlers();
-    nextRunTime = calcNextHour();
+    nextRunTime = calcNext30Min();
   });
 
-  nextRunTime = calcNextHour();
+  nextRunTime = calcNext30Min();
 
-  console.log('[스케줄러] 1시간 주기 스케줄러 시작됨');
+  console.log('[스케줄러] 30분 주기 스케줄러 시작됨');
   console.log(`[스케줄러] 다음 실행 시간: ${new Date(nextRunTime).toLocaleString('ko-KR')}`);
 }
 

@@ -317,6 +317,28 @@ router.get('/articles/bookmarked', (req, res) => {
   }
 });
 
+// ─── 긴급 기사 목록 ──────────────────────────────────────────
+// GET /api/articles/urgent?limit=5
+router.get('/articles/urgent', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 5, 20);
+    const urgentKws = ['명 사망', '사망자', '다수 사망', '올해만', '또 사망', '첫 구속', '동시 사망', '명이 숨'];
+    const conditions = urgentKws.map(() => `title LIKE ?`).join(' OR ');
+    const params = urgentKws.map(k => `%${k}%`);
+    const rows = db.prepare(`
+      SELECT * FROM articles
+      WHERE (${conditions})
+      AND category IN ('중대재해','산업재해·안전')
+      AND published_at >= date('now', '-7 days')
+      ORDER BY published_at DESC
+      LIMIT ?
+    `).all(...params, limit);
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // GET /api/articles/:id - 개별 기사 조회
 router.get('/articles/:id', (req, res) => {
   try {
@@ -514,6 +536,187 @@ router.post('/articles/:id/bookmark', (req, res) => {
     const val = req.body?.bookmarked ? 1 : 0;
     db.prepare('UPDATE articles SET is_bookmarked = ? WHERE id = ?').run(val, req.params.id);
     res.json({ success: true, bookmarked: !!val });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ─── 주간 트렌드 ────────────────────────────────────────────
+// GET /api/stats/weekly-trend?weeks=8
+// 최근 N주 동안 주차별 기사 수 집계 (카테고리별 breakdown 포함)
+router.get('/stats/weekly-trend', (req, res) => {
+  try {
+    const weeks = Math.min(parseInt(req.query.weeks) || 8, 26);
+    // 오늘 KST 기준 주차별 집계 (published_at 기준)
+    const rows = db.prepare(`
+      SELECT
+        strftime('%Y-W%W', date(published_at)) as week_label,
+        strftime('%Y', published_at) as yr,
+        strftime('%W', published_at) as wk,
+        COUNT(*) as total,
+        SUM(CASE WHEN category = '중대재해' THEN 1 ELSE 0 END) as disaster,
+        SUM(CASE WHEN category = '산업재해·안전' THEN 1 ELSE 0 END) as safety,
+        SUM(CASE WHEN category = '법령·제도' THEN 1 ELSE 0 END) as law,
+        SUM(CASE WHEN category = '정책·브리핑' THEN 1 ELSE 0 END) as policy,
+        SUM(CASE WHEN category = '직업보건·화학' THEN 1 ELSE 0 END) as health,
+        SUM(CASE WHEN category = '기관동향' THEN 1 ELSE 0 END) as agency
+      FROM articles
+      WHERE published_at >= date('now', ?)
+      GROUP BY week_label
+      ORDER BY week_label ASC
+      LIMIT ?
+    `).all(`-${weeks * 7} days`, weeks + 2);
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ─── 일별 트렌드 ─────────────────────────────────────────────
+// GET /api/stats/daily-trend?days=30
+router.get('/stats/daily-trend', (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days) || 30, 90);
+    const rows = db.prepare(`
+      SELECT
+        date(published_at) as day,
+        COUNT(*) as total,
+        SUM(CASE WHEN category = '중대재해' THEN 1 ELSE 0 END) as disaster,
+        SUM(CASE WHEN category = '산업재해·안전' THEN 1 ELSE 0 END) as safety,
+        SUM(CASE WHEN category = '법령·제도' THEN 1 ELSE 0 END) as law,
+        SUM(CASE WHEN category = '정책·브리핑' THEN 1 ELSE 0 END) as policy,
+        SUM(CASE WHEN category = '직업보건·화학' THEN 1 ELSE 0 END) as health,
+        SUM(CASE WHEN category = '기관동향' THEN 1 ELSE 0 END) as agency
+      FROM articles
+      WHERE published_at >= date('now', ?)
+      GROUP BY day
+      ORDER BY day ASC
+    `).all(`-${days} days`);
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ─── 위험 업종별 통계 ────────────────────────────────────────
+// GET /api/stats/industry?days=30
+router.get('/stats/industry', (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days) || 30, 180);
+    // 기사 제목/키워드에서 업종 키워드 매칭으로 집계
+    const industries = [
+      { name: '건설업',     kws: ['건설', '공사현장', '건축', '토목', '아파트 공사', '건설현장'] },
+      { name: '제조업',     kws: ['제조', '공장', '조선', '철강', '화학공장', '제철', '반도체'] },
+      { name: '물류·운수',  kws: ['물류', '운수', '창고', '지게차', '택배', '운반'] },
+      { name: '서비스업',   kws: ['서비스', '식품', '청소', '경비', '의료기관'] },
+      { name: '조선·해양',  kws: ['조선소', '해양플랜트', '선박', '도크'] },
+      { name: '석유화학',   kws: ['석유화학', '정유', '화학공장', '플랜트', '가스'] },
+      { name: '광업',       kws: ['광업', '광산', '채광', '굴착'] },
+      { name: '농업·임업',  kws: ['농업 재해', '임업 사고', '농기계'] },
+    ];
+    const since = `date('now', '-${days} days')`;
+    const results = industries.map(ind => {
+      const likeClause = ind.kws.map(() => `(title LIKE ? OR keywords LIKE ?)`).join(' OR ');
+      const params = ind.kws.flatMap(k => [`%${k}%`, `%${k}%`]);
+      const row = db.prepare(`
+        SELECT COUNT(*) as cnt FROM articles
+        WHERE published_at >= date('now', ?)
+        AND (${likeClause})
+      `).get(`-${days} days`, ...params);
+      return { industry: ind.name, cnt: row.cnt };
+    });
+    results.sort((a, b) => b.cnt - a.cnt);
+    res.json({ success: true, data: results, days });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ─── 지역별 사고 통계 ────────────────────────────────────────
+// GET /api/stats/region?days=30
+router.get('/stats/region', (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days) || 30, 180);
+    const regions = [
+      { name: '서울', kws: ['서울', '서울시'] },
+      { name: '경기', kws: ['경기', '수원', '성남', '안산', '시흥', '화성', '평택', '인천'] },
+      { name: '인천', kws: ['인천'] },
+      { name: '부산', kws: ['부산'] },
+      { name: '경남', kws: ['경남', '창원', '울산', '거제', '통영'] },
+      { name: '울산', kws: ['울산'] },
+      { name: '경북', kws: ['경북', '포항', '구미', '경주'] },
+      { name: '충남', kws: ['충남', '천안', '아산', '당진', '서산'] },
+      { name: '충북', kws: ['충북', '청주', '충주'] },
+      { name: '전남', kws: ['전남', '여수', '광양', '순천'] },
+      { name: '전북', kws: ['전북', '전주', '군산', '익산'] },
+      { name: '강원', kws: ['강원', '강릉', '춘천'] },
+      { name: '광주', kws: ['광주'] },
+      { name: '대구', kws: ['대구'] },
+      { name: '대전', kws: ['대전'] },
+      { name: '세종', kws: ['세종'] },
+      { name: '제주', kws: ['제주'] },
+    ];
+    const results = regions.map(r => {
+      const likeClause = r.kws.map(() => `title LIKE ?`).join(' OR ');
+      const params = r.kws.map(k => `%${k}%`);
+      const row = db.prepare(`
+        SELECT COUNT(*) as cnt FROM articles
+        WHERE published_at >= date('now', ?)
+        AND category IN ('중대재해','산업재해·안전')
+        AND (${likeClause})
+      `).get(`-${days} days`, ...params);
+      return { region: r.name, cnt: row.cnt };
+    });
+    results.sort((a, b) => b.cnt - a.cnt);
+    res.json({ success: true, data: results.filter(r => r.cnt > 0), days });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+
+
+// ─── 오늘의 주요 지표 요약 ────────────────────────────────────
+// GET /api/stats/today-summary
+router.get('/stats/today-summary', (req, res) => {
+  try {
+    const todayStr = (() => {
+      const now = new Date();
+      const kst = new Date(now.getTime() + 9 * 3600 * 1000);
+      return kst.toISOString().substring(0, 10);
+    })();
+    const weekAgo = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      return d.toISOString().substring(0, 10);
+    })();
+    const monthAgo = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      return d.toISOString().substring(0, 10);
+    })();
+
+    const today = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) = ?`).get(todayStr);
+    const week  = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) >= ?`).get(weekAgo);
+    const month = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) >= ?`).get(monthAgo);
+    const todayDisaster = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) = ? AND category = '중대재해'`).get(todayStr);
+    const weekDisaster  = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) >= ? AND category = '중대재해'`).get(weekAgo);
+    const todaySafety   = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) = ? AND category = '산업재해·안전'`).get(todayStr);
+    const totalAll      = db.prepare(`SELECT COUNT(*) as cnt FROM articles`).get();
+
+    res.json({
+      success: true,
+      data: {
+        today: today.cnt,
+        week: week.cnt,
+        month: month.cnt,
+        total: totalAll.cnt,
+        todayDisaster: todayDisaster.cnt,
+        weekDisaster: weekDisaster.cnt,
+        todaySafety: todaySafety.cnt,
+        kstDate: todayStr,
+      },
+    });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
