@@ -1609,7 +1609,17 @@ async function loadDonutChart() {
   const vals = catOrder.map(name => cats.find(c => c.category === name)?.count || 0);
   const colors = catOrder.map(name => DONUT_COLORS[name] || '#94a3b8');
   const ctx = el.getContext('2d');
-  const W = el.width, H = el.height;
+  // DPR(Retina) 대응 – 실제 px 크기로 canvas 내부 해상도 설정
+  const dpr = window.devicePixelRatio || 1;
+  const displayW = el.parentElement?.clientWidth || 140;
+  const displayH = el.parentElement?.clientHeight || 140;
+  const canvasSize = Math.min(displayW, displayH, 160);
+  el.width  = canvasSize * dpr;
+  el.height = canvasSize * dpr;
+  el.style.width  = canvasSize + 'px';
+  el.style.height = canvasSize + 'px';
+  ctx.scale(dpr, dpr);
+  const W = canvasSize, H = canvasSize;
   const cx = W/2, cy = H/2, r = Math.min(W,H)/2 - 8, ri = r * 0.58;
   ctx.clearRect(0, 0, W, H);
   let startAngle = -Math.PI / 2;
@@ -1622,7 +1632,7 @@ async function loadDonutChart() {
     startAngle += slice;
   });
   ctx.beginPath(); ctx.arc(cx, cy, ri, 0, 2 * Math.PI);
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface-2').trim() || '#1e293b';
+  ctx.fillStyle = '#ffffff';
   ctx.fill();
   const centerEl = $('#donutCenterVal');
   if (centerEl) centerEl.textContent = total.toLocaleString();
@@ -1645,6 +1655,15 @@ async function loadDonutChart() {
         S.tab = 'latest';
         $$('.nav-item').forEach(x => x.classList.remove('active'));
         $('[data-tab="latest"]')?.classList.add('active');
+        // 모바일: 사이드바 닫기
+        if (window.innerWidth <= 900) {
+          $('#sidebar')?.classList.remove('mobile-open');
+          $('#sidebarOverlay')?.classList.remove('open');
+          document.body.classList.remove('sidebar-active');
+          document.body.style.position = '';
+          document.body.style.top = '';
+          document.body.style.width = '';
+        }
         doSearch();
       });
     });
@@ -1659,19 +1678,33 @@ async function loadTrendChart(days) {
   const el = $('#trendChart');
   if (!el || rows.length === 0) return;
   const ctx = el.getContext('2d');
-  const W = el.parentElement?.clientWidth || 400;
-  const H = el.height;
-  el.width = W; ctx.clearRect(0, 0, W, H);
+  // 모바일 DPR 대응 – 부모 컨테이너 폭 기반
+  const dpr  = window.devicePixelRatio || 1;
+  const displayW = Math.max(el.parentElement?.clientWidth || 0, 200);
+  const displayH = window.innerWidth <= 480 ? 90
+                 : window.innerWidth <= 640 ? 110
+                 : 140;
+  el.width  = displayW * dpr;
+  el.height = displayH * dpr;
+  el.style.width  = displayW + 'px';
+  el.style.height = displayH + 'px';
+  ctx.scale(dpr, dpr);
+  const W = displayW, H = displayH;
+  ctx.clearRect(0, 0, W, H);
   const totals = rows.map(r => r.total);
   const maxVal = Math.max(...totals, 1);
-  const barW = Math.max(4, Math.floor((W - 30) / Math.max(rows.length,1)) - 2);
-  const padL = 28, padB = 22, padT = 10;
+  const barW = Math.max(3, Math.floor((W - 30) / Math.max(rows.length,1)) - 2);
+  const padL = 26, padB = 20, padT = 8;
   const chartH = H - padT - padB; const chartW = W - padL;
   ctx.strokeStyle = 'rgba(148,163,184,0.15)'; ctx.lineWidth = 1;
   [0.25, 0.5, 0.75, 1].forEach(p => {
     const y = padT + chartH * (1 - p);
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W, y); ctx.stroke();
   });
+  // X축 레이블 표시 간격 (모바일에서 더 넓게)
+  const labelStep = window.innerWidth <= 480
+    ? Math.max(1, Math.floor(rows.length / 4))
+    : Math.max(1, Math.floor(rows.length / 7));
   rows.forEach((r, i) => {
     const x = padL + i * (chartW / rows.length) + (chartW / rows.length - barW) / 2;
     let stackY = padT + chartH;
@@ -1683,13 +1716,18 @@ async function loadTrendChart(days) {
     drawSeg(r.disaster || 0, '#ef4444cc');
     drawSeg(r.safety || 0,   '#f97316cc');
     drawSeg((r.law||0) + (r.policy||0) + (r.health||0) + (r.agency||0), '#3b82f6aa');
-    if (i % Math.max(1, Math.floor(rows.length / 7)) === 0) {
-      ctx.fillStyle = '#94a3b8'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    if (i % labelStep === 0) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = `${window.innerWidth <= 480 ? 8 : 9}px sans-serif`;
+      ctx.textAlign = 'center';
       ctx.fillText((r.day||'').substring(5), x + barW/2, H - 4);
     }
   });
-  ctx.fillStyle = '#94a3b8'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
-  ctx.fillText(maxVal, padL - 2, padT + 8); ctx.fillText(0, padL - 2, H - padB + 6);
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = `${window.innerWidth <= 480 ? 8 : 9}px sans-serif`;
+  ctx.textAlign = 'right';
+  ctx.fillText(maxVal, padL - 2, padT + 8);
+  ctx.fillText(0, padL - 2, H - padB + 6);
 }
 
 // ── 긴급 모니터링 기사 ─────────────────────────────────────────
@@ -1810,6 +1848,328 @@ function startAutoRefresh() {
     if (S.tab === 'latest' && S.page === 1 && !S.query && !S.quickPeriod && !S.crawledFrom) await loadFeed();
     drawKwTrend();
   }, 5 * 60 * 1000);
+}
+
+// ══════════════════════════════════════════════════════════════
+// ⑨ 탭 전환
+// ══════════════════════════════════════════════════════════════
+function switchTab(tab) {
+  S.tab      = tab;
+  S.page     = 1;
+  S.category = 'all';
+  S.query    = '';
+  S.quickPeriod = null;
+  S.advFrom = ''; S.advTo = '';
+  S.advYear = ''; S.advMonth = ''; S.advDay = ''; S.advHour = '';
+  S.crawledFrom = ''; S.crawledTo = '';
+
+  // nav 활성화
+  $$('.nav-item').forEach(li => li.classList.toggle('active', li.dataset.tab === tab));
+  // 카테고리 셀렉트 초기화
+  const sel = $('#selCategory');
+  if (sel) sel.value = 'all';
+  // 검색창 초기화
+  const gs = $('#globalSearch');
+  if (gs) gs.value = '';
+  // 칩 초기화
+  $$('.chip').forEach(c => c.classList.remove('active'));
+  $('#chipAll')?.classList.add('active');
+  // 페이지 타이틀
+  const titles = {
+    latest: '전체 최신 기사', disaster: '중대재해',
+    safety: '산업재해·안전', law: '법령·제도',
+    policy: '정책·브리핑', health: '직업보건·화학',
+    kosha: '기관 동향', bookmarks: '북마크한 기사',
+  };
+  const titleEl = $('#pageTitle');
+  if (titleEl) titleEl.textContent = titles[tab] || '전체 최신 기사';
+  // 모바일: 사이드바 닫기
+  if (window.innerWidth <= 900) {
+    $('#sidebar')?.classList.remove('mobile-open');
+    $('#sidebarOverlay')?.classList.remove('open');
+    document.body.classList.remove('sidebar-active');
+    $('#hamburger')?.classList.remove('is-open');
+    const scrollY = parseInt(document.body.style.top || '0') * -1;
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    window.scrollTo(0, scrollY || 0);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ⑩ 이벤트 바인딩 (bindEvents)
+// ══════════════════════════════════════════════════════════════
+function bindEvents() {
+  // 네비 탭 클릭
+  $$('.nav-item').forEach(li => {
+    li.addEventListener('click', () => switchTab(li.dataset.tab));
+  });
+
+  // 퀵 칩 (오늘/이번주/이번달)
+  $('#chipAll')?.addEventListener('click', () => {
+    S.quickPeriod = null; S.advFrom = ''; S.advTo = '';
+    S.advYear = ''; S.advMonth = ''; S.advDay = ''; S.advHour = '';
+    S.dateFrom = ''; S.dateTo = '';
+    $$('.chip').forEach(c => c.classList.remove('active'));
+    $('#chipAll')?.classList.add('active');
+    doSearch();
+  });
+  $('#chipToday')?.addEventListener('click', () => {
+    S.quickPeriod = 'today';
+    $$('.chip').forEach(c => c.classList.remove('active'));
+    $('#chipToday')?.classList.add('active');
+    doSearch();
+  });
+  $('#chipWeek')?.addEventListener('click', () => {
+    S.quickPeriod = 'week';
+    $$('.chip').forEach(c => c.classList.remove('active'));
+    $('#chipWeek')?.classList.add('active');
+    doSearch();
+  });
+  $('#chipMonth')?.addEventListener('click', () => {
+    S.quickPeriod = 'month';
+    $$('.chip').forEach(c => c.classList.remove('active'));
+    $('#chipMonth')?.classList.add('active');
+    doSearch();
+  });
+
+  // 검색 버튼
+  $('#btnSearch')?.addEventListener('click', () => {
+    S.query = $('#globalSearch')?.value.trim() || '';
+    if (S.query) pushSearchHist(S.query);
+    S.tab = 'latest';
+    $$('.nav-item').forEach(li => li.classList.toggle('active', li.dataset.tab === 'latest'));
+    const titleEl = $('#pageTitle');
+    if (titleEl) titleEl.textContent = S.query ? `"${S.query}" 검색 결과` : '전체 최신 기사';
+    doSearch();
+  });
+
+  // 필터 초기화
+  $('#btnReset')?.addEventListener('click', () => {
+    S.query = ''; S.category = 'all'; S.source = 'all';
+    S.dateFrom = ''; S.dateTo = '';
+    S.quickPeriod = null;
+    S.advFrom = ''; S.advTo = '';
+    S.advYear = ''; S.advMonth = ''; S.advDay = ''; S.advHour = '';
+    S.crawledFrom = ''; S.crawledTo = '';
+    const gs = $('#globalSearch'); if (gs) gs.value = '';
+    const sc = $('#selCategory'); if (sc) sc.value = 'all';
+    const ss = $('#selSource'); if (ss) ss.value = 'all';
+    const df = $('#dateFrom'); if (df) { df.value = ''; df.type = 'text'; }
+    const dt = $('#dateTo'); if (dt) { dt.value = ''; dt.type = 'text'; }
+    $$('.chip').forEach(c => c.classList.remove('active'));
+    $('#chipAll')?.classList.add('active');
+    $$('.cat-item').forEach(c => c.classList.remove('active'));
+    doSearch();
+  });
+
+  // 카테고리 셀렉트
+  $('#selCategory')?.addEventListener('change', e => {
+    S.category = e.target.value;
+    doSearch();
+  });
+
+  // 정렬, 페이지 크기
+  $('#sortOrder')?.addEventListener('change', () => doSearch());
+  $('#pageSize')?.addEventListener('change', e => {
+    S.pageSize = +e.target.value;
+    doSearch();
+  });
+
+  // 뷰 토글 (카드/리스트)
+  $('#viewCard')?.addEventListener('click', () => {
+    S.viewMode = 'card';
+    $('#viewCard')?.classList.add('active');
+    $('#viewList')?.classList.remove('active');
+    doSearch();
+  });
+  $('#viewList')?.addEventListener('click', () => {
+    S.viewMode = 'list';
+    $('#viewList')?.classList.add('active');
+    $('#viewCard')?.classList.remove('active');
+    doSearch();
+  });
+
+  // 드로어 닫기
+  $('#drawerClose')?.addEventListener('click', closeDrawer);
+  $('#overlay')?.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeDrawer();
+      closeShareModal();
+      hideSuggest();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      $('#globalSearch')?.focus();
+    }
+  });
+
+  // 크롤 버튼 (탑바 + 모바일)
+  async function doCrawl(btn) {
+    if (btn) { btn.classList.add('loading'); btn.disabled = true; }
+    [$('#btnCrawl'), $('#btnCrawlMobile')].forEach(b => { if (b && b !== btn) { b.classList.add('loading'); b.disabled = true; } });
+    try {
+      const r = await fetch('/api/crawl', { method: 'POST' });
+      const j = await r.json();
+      if (j.success) {
+        toast(`✅ ${j.message || '수집 완료'}`, 'success', 4000);
+        setTimeout(() => { loadDashboard(); loadFeed(); loadNewDashboard(); }, 1500);
+      } else {
+        toast(j.message || '수집 중 오류가 발생했습니다.', 'error');
+      }
+    } catch {
+      toast('서버에 연결할 수 없습니다.', 'error');
+    } finally {
+      [$('#btnCrawl'), $('#btnCrawlMobile')].forEach(b => { if (b) { b.classList.remove('loading'); b.disabled = false; } });
+    }
+  }
+  $('#btnCrawl')?.addEventListener('click', function() { doCrawl(this); });
+  $('#btnCrawlMobile')?.addEventListener('click', function() { doCrawl(this); });
+
+  // 고급 날짜 토글
+  const advToggle = () => {
+    const panel = $('#advPanel');
+    const btn1  = $('#btnAdvDate');
+    const btn2  = $('#btnAdvDate2');
+    if (!panel) return;
+    const open = panel.classList.toggle('open');
+    btn1?.classList.toggle('active', open);
+    btn2?.classList.toggle('active', open);
+  };
+  $('#btnAdvDate')?.addEventListener('click', advToggle);
+  $('#btnAdvDate2')?.addEventListener('click', advToggle);
+  $('#btnAdvApply')?.addEventListener('click', () => {
+    const at = S.advTab;
+    if (at === 'range') {
+      S.advFrom = $('#advFrom')?.value || '';
+      S.advTo   = $('#advTo')?.value   || '';
+    } else if (at === 'year') {
+      S.advYear = $('#advYear')?.value || '';
+    } else if (at === 'month') {
+      S.advYear  = $('#advMonthYear')?.value || '';
+      S.advMonth = $('#advMonth')?.value     || '';
+    } else if (at === 'day') {
+      S.advDay = $('#advDay')?.value || '';
+    } else if (at === 'hour') {
+      S.advDay  = $('#advHourDate')?.value || '';
+      S.advHour = $('#advHour')?.value     || '';
+    }
+    S.quickPeriod = null;
+    $$('.chip').forEach(c => c.classList.remove('active'));
+    doSearch();
+  });
+
+  // 엑셀 다운로드
+  $('#btnExcelDown')?.addEventListener('click', () => {
+    const qs = new URLSearchParams();
+    const p  = buildParams();
+    Object.entries(p).forEach(([k,v]) => { if (v !== undefined && v !== '' && v !== 'all') qs.set(k, v); });
+    qs.set('limit', '5000');
+    window.location.href = `/api/articles/export?${qs}`;
+  });
+
+  // 공유 모달 닫기
+  $('#shareModalClose')?.addEventListener('click', closeShareModal);
+}
+
+// ══════════════════════════════════════════════════════════════
+// ⑪ 고급 날짜 탭 초기화
+// ══════════════════════════════════════════════════════════════
+function initAdvTabs() {
+  $$('.adv-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      $$('.adv-tab').forEach(t => t.classList.remove('active'));
+      $$('.adv-tab-body').forEach(b => b.classList.remove('active'));
+      tab.classList.add('active');
+      S.advTab = tab.dataset.atab;
+      $(`#atab-${S.advTab}`)?.classList.add('active');
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// ⑫ 모바일 메뉴 초기화
+// ══════════════════════════════════════════════════════════════
+function initMobileMenu() {
+  const hamburger = $('#hamburger');
+  const sidebar   = $('#sidebar');
+  const overlay   = $('#sidebarOverlay');
+  if (!hamburger || !sidebar || !overlay) return;
+
+  let _scrollY = 0;
+
+  const openMenu = () => {
+    _scrollY = window.scrollY;
+    hamburger.classList.add('is-open');
+    sidebar.classList.add('mobile-open');
+    overlay.classList.add('open');
+    // iOS 스크롤 잠금
+    document.body.style.position = 'fixed';
+    document.body.style.top      = `-${_scrollY}px`;
+    document.body.style.left     = '0';
+    document.body.style.right    = '0';
+    document.body.style.width    = '100%';
+    document.body.classList.add('sidebar-active');
+    hamburger.setAttribute('aria-label', '메뉴 닫기');
+    hamburger.setAttribute('aria-expanded', 'true');
+  };
+
+  const closeMenu = () => {
+    hamburger.classList.remove('is-open');
+    sidebar.classList.remove('mobile-open');
+    overlay.classList.remove('open');
+    // iOS 스크롤 복원
+    document.body.style.position = '';
+    document.body.style.top      = '';
+    document.body.style.left     = '';
+    document.body.style.right    = '';
+    document.body.style.width    = '';
+    document.body.classList.remove('sidebar-active');
+    window.scrollTo(0, _scrollY);
+    hamburger.setAttribute('aria-label', '메뉴 열기');
+    hamburger.setAttribute('aria-expanded', 'false');
+  };
+
+  hamburger.addEventListener('click', () => {
+    sidebar.classList.contains('mobile-open') ? closeMenu() : openMenu();
+  });
+  overlay.addEventListener('click', closeMenu);
+
+  // 스와이프로 닫기 (터치)
+  let touchStartX = 0;
+  sidebar.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  sidebar.addEventListener('touchend', e => {
+    if (e.changedTouches[0].clientX - touchStartX < -60) closeMenu();
+  }, { passive: true });
+}
+
+// ══════════════════════════════════════════════════════════════
+// ⑬ 연도 옵션 초기화
+// ══════════════════════════════════════════════════════════════
+async function initYearOpts() {
+  const now = new Date();
+  const curY = now.getFullYear() + 1;   // 내년까지
+  const minY = 2022;
+  const years = [];
+  for (let y = curY; y >= minY; y--) years.push(y);
+
+  const populate = (sel) => {
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">연도 선택</option>';
+    years.forEach(y => {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = `${y}년`;
+      if (String(y) === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+  };
+  populate($('#advYear'));
+  populate($('#advMonthYear'));
 }
 
 // ── 초기화 ──────────────────────────────────────────────────
