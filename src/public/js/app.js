@@ -1609,11 +1609,11 @@ async function loadDonutChart() {
   const vals = catOrder.map(name => cats.find(c => c.category === name)?.count || 0);
   const colors = catOrder.map(name => DONUT_COLORS[name] || '#94a3b8');
   const ctx = el.getContext('2d');
-  // DPR(Retina) 대응 – 실제 px 크기로 canvas 내부 해상도 설정
+  // DPR(Retina) 대응 – breakpoint별 고정 크기 (부모 높이 의존성 제거)
   const dpr = window.devicePixelRatio || 1;
-  const displayW = el.parentElement?.clientWidth || 140;
-  const displayH = el.parentElement?.clientHeight || 140;
-  const canvasSize = Math.min(displayW, displayH, 160);
+  const iw = window.innerWidth;
+  // ★ CSS와 동기화: 480px→120, 640px→140, 768px→160, 데스크탑→180
+  const canvasSize = iw <= 480 ? 120 : iw <= 640 ? 140 : iw <= 768 ? 160 : 180;
   el.width  = canvasSize * dpr;
   el.height = canvasSize * dpr;
   el.style.width  = canvasSize + 'px';
@@ -1681,9 +1681,9 @@ async function loadTrendChart(days) {
   // 모바일 DPR 대응 – 부모 컨테이너 폭 기반
   const dpr  = window.devicePixelRatio || 1;
   const displayW = Math.max(el.parentElement?.clientWidth || 0, 200);
-  const displayH = window.innerWidth <= 480 ? 90
-                 : window.innerWidth <= 640 ? 110
-                 : 140;
+  // ★ CSS와 동기화: 480px→90, 640px→110, 768px→160, 데스크탑→190
+  const iw2 = window.innerWidth;
+  const displayH = iw2 <= 480 ? 90 : iw2 <= 640 ? 110 : iw2 <= 768 ? 160 : 190;
   el.width  = displayW * dpr;
   el.height = displayH * dpr;
   el.style.width  = displayW + 'px';

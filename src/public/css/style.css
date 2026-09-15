@@ -1852,16 +1852,16 @@ body.sidebar-active {
   }
 }
 .kpi-icon {
-  width: 40px; height: 40px; border-radius: 10px;
+  width: 44px; height: 44px; border-radius: 10px;
   background: rgba(30,64,104,.1);
   display: flex; align-items:center; justify-content:center;
-  font-size: 20px; color: var(--accent-main, var(--navy-500)); flex-shrink:0;
+  font-size: 22px; color: var(--accent-main, var(--navy-500)); flex-shrink:0;
 }
 .kpi-icon-red   { background: rgba(239,68,68,.1);  color: #ef4444; }
 .kpi-icon-green { background: rgba(16,185,129,.1); color: #10b981; }
 .kpi-body { flex:1; min-width:0; }
 .kpi-val {
-  font-size: 22px; font-weight: 800; line-height: 1.1;
+  font-size: 24px; font-weight: 800; line-height: 1.1;
   letter-spacing: -.5px; color: var(--text-primary, var(--navy-900));
   font-family: var(--font-body);
 }
@@ -1869,8 +1869,8 @@ body.sidebar-active {
 .kpi-val.danger { color: #ef4444; }
 .kpi-val.green  { color: #10b981; }
 .kpi-label {
-  font-size: 11.5px; color: var(--text-muted, var(--navy-400));
-  margin-top: 3px; font-weight: 500;
+  font-size: 12px; color: var(--text-muted, var(--navy-400));
+  margin-top: 4px; font-weight: 500;
   font-family: var(--font-body);
   /* ★ 기본: nowrap 말줄임 (넓은 화면) */
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -1880,8 +1880,9 @@ body.sidebar-active {
 /* ── 차트 행 ─────────────────────────────────────────────────── */
 .dash-chart-row {
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 12px;
+  /* ★ 도넛 카드 너비 확대(340px): 범례 텍스트 잘림 방지 + 넓은 공간 확보 */
+  grid-template-columns: 340px 1fr;
+  gap: 14px;
   align-items: start;
 }
 .dash-card {
@@ -1907,11 +1908,14 @@ body.sidebar-active {
 }
 
 /* 도넛 차트 */
-.dash-card-donut { min-height: 240px; }
+.dash-card-donut {
+  /* ★ min-height 제거: 콘텐츠 높이에 맞춤 */
+}
 .donut-wrap {
   display: flex; justify-content:center; align-items:center;
-  position: relative; margin: 4px auto 10px;
-  width: 140px; height: 140px;
+  position: relative; margin: 8px auto 14px;
+  /* ★ 180px로 확대: 도넛 가독성 향상 */
+  width: 180px; height: 180px;
 }
 .donut-wrap canvas { display:block; }
 .donut-center {
@@ -1920,7 +1924,7 @@ body.sidebar-active {
   pointer-events:none; text-align:center;
 }
 .donut-center-val {
-  font-size: 18px; font-weight: 800;
+  font-size: 20px; font-weight: 800;
   color: var(--text-primary, var(--navy-900)); line-height:1.1;
   font-family: var(--font-body);
 }
@@ -1930,7 +1934,7 @@ body.sidebar-active {
 }
 .donut-legend {
   list-style:none; margin:0; padding:0;
-  display:flex; flex-direction:column; gap:4px;
+  display:flex; flex-direction:column; gap:5px;
 }
 .donut-legend-item {
   display:flex; align-items:center; gap:7px;
@@ -1943,7 +1947,7 @@ body.sidebar-active {
 }
 .donut-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
 .donut-name {
-  flex:1; font-size:11.5px;
+  flex:1; font-size:12px;
   color:var(--text-secondary, var(--navy-700));
   font-family: var(--font-body);
   /* 긴 카테고리명 말줄임 */
@@ -1975,8 +1979,15 @@ body.sidebar-active {
   background:var(--accent-main, var(--navy-500));
   color:#fff; border-color:var(--accent-main, var(--navy-500));
 }
-.trend-chart-wrap { overflow:hidden; border-radius:6px; margin-top:8px; }
-.trend-chart-wrap canvas { display:block; max-width:100%; height:auto; }
+.trend-chart-wrap {
+  overflow:hidden; border-radius:6px; margin-top:8px;
+  /* ★ 트렌드 차트 래퍼: 데스크탑 최소 높이 보장 */
+  min-height: 190px;
+}
+.trend-chart-wrap canvas {
+  display:block; max-width:100%;
+  /* ★ height:auto 제거 → JS가 height 직접 지정 */
+}
 
 /* ── 하단 행 ─────────────────────────────────────────────────── */
 .dash-bottom-row {
@@ -2135,12 +2146,12 @@ body.sidebar-active {
    반응형 대시보드 (완전 모바일 최적화)
 ══════════════════════════════════════════════════════════════ */
 
-/* 1100px 이하: KPI 2열, 차트 세로 배치, 하단 2열 */
+/* 1100px 이하: KPI 4열 유지, 차트 비율 조정, 하단 2열 */
 @media (max-width: 1100px) {
-  .dash-kpi-row      { grid-template-columns: repeat(2, 1fr); }
-  .dash-chart-row    { grid-template-columns: 1fr; }
-  .dash-card-donut   { min-height: auto; }
-  .donut-wrap        { margin: 0 auto 10px; }
+  .dash-kpi-row      { gap: 10px; }
+  /* ★ 1100px 이하: 도넛 너비 320px 유지 */
+  .dash-chart-row    { grid-template-columns: 320px 1fr; gap: 12px; }
+  .donut-wrap        { margin: 6px auto 12px; }
   .dash-bottom-row   { grid-template-columns: 1fr 1fr; }
 }
 
@@ -2150,23 +2161,27 @@ body.sidebar-active {
   .dash-toggle-btn { width: calc(100% - 28px); margin: 0 14px; }
 }
 
-/* 768px 이하: 하단 행 1열, 카드 간격 줄임 */
+/* 768px 이하: 차트 세로 전환, 하단 행 1열 */
 @media (max-width: 768px) {
   .dashboard-panel { padding: 10px 10px 0; gap: 10px; }
   .dash-kpi-row    { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .dash-kpi-card   { padding: 10px 12px; gap: 8px; }
-  .kpi-val         { font-size: 19px; }
-  .kpi-icon        { width: 36px; height: 36px; font-size: 17px; }
+  .kpi-val         { font-size: 20px; }
+  .kpi-icon        { width: 38px; height: 38px; font-size: 18px; }
+  /* ★ 768px: 차트 세로 배치 */
+  .dash-chart-row  { grid-template-columns: 1fr; gap: 10px; }
   .dash-bottom-row { grid-template-columns: 1fr; }
   .dash-card       { padding: 12px 14px; }
   .dash-toggle-btn { width: calc(100% - 20px); margin: 0 10px; }
-  /* 도넛: 가로 배치 (차트 + 범례 나란히) */
+  /* ★ 768px: 트렌드 차트 높이 조정 */
+  .trend-chart-wrap { min-height: 160px; }
+  /* 도넛: 가로 배치 (차트 + 범례 나란히) — 너비 제한 없이 펼침 */
   .dash-card-donut {
     display: flex; flex-direction: row; align-items: flex-start;
-    gap: 16px; flex-wrap: wrap;
+    gap: 16px; flex-wrap: nowrap;
   }
-  .donut-wrap { margin: 0; flex-shrink: 0; }
-  .donut-legend { flex: 1; min-width: 140px; }
+  .donut-wrap { margin: 0; flex-shrink: 0; width: 160px; height: 160px; }
+  .donut-legend { flex: 1; min-width: 130px; }
 }
 
 /* 640px 이하: KPI 2열 유지하되 compact */
@@ -2181,8 +2196,12 @@ body.sidebar-active {
   .dash-toggle-btn { width: calc(100% - 16px); margin: 0 8px; font-size: 11px; }
   /* 하단행 긴급/업종/지역 간격 */
   .dash-bottom-row { gap: 8px; }
-  /* 트렌드 차트 높이 축소 */
+  /* ★ 640px: 트렌드 래퍼 min-height override */
+  .trend-chart-wrap { min-height: 110px; }
+  /* 트렌드 차트 높이 JS값과 일치 */
   #trendChart { height: 110px !important; }
+  /* 도넛 크기 축소 */
+  .donut-wrap { width: 140px; height: 140px; }
 }
 
 /* 480px 이하: 가장 좁은 화면 */
@@ -2204,7 +2223,9 @@ body.sidebar-active {
   #donutChart { width: 120px !important; height: 120px !important; }
   .donut-legend { width: 100%; }
   .donut-name { font-size: 11px; }
-  /* 트렌드 */
+  /* ★ 480px: 트렌드 래퍼 min-height override */
+  .trend-chart-wrap { min-height: 90px; }
+  /* 트렌드 차트 높이 JS값과 일치 */
   #trendChart { height: 90px !important; }
   .trend-btn  { padding: 2px 7px; font-size: 10px; }
   .dash-toggle-btn { font-size: 10.5px; padding: 6px 0; }
