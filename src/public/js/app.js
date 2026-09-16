@@ -1649,10 +1649,38 @@ async function loadDashboardKPI() {
   setKPI('#dkpiTodayVal',    d.today);
   setKPI('#dkpiDisasterVal', d.todayDisaster);
   setKPI('#dkpiWeekVal',     d.week);
+  // ★ KPI 카드 클릭 필터: today-summary API와 동일한 crawled_at 범위 사용
+  //   → 사이드바(loadDashboard)의 todayRange와 동일 기준이므로 수치 일치
   const kpiMap = [
-    { id: '#dkpiTotal',    fn: () => { S.category='all'; S.quickPeriod=null; doSearch(); } },
-    { id: '#dkpiToday',    fn: () => { $('#chipToday')?.click(); } },
-    { id: '#dkpiDisaster', fn: () => { S.category='중대재해'; switchTab('disaster'); doSearch(); } },
+    { id: '#dkpiTotal',    fn: () => {
+        S.category='all'; S.quickPeriod=null;
+        S.crawledFrom=''; S.crawledTo='';
+        S.dateFrom=''; S.dateTo='';
+        $$('.chip').forEach(c => c.classList.remove('active'));
+        $('#chipAll')?.classList.add('active');
+        doSearch();
+      }
+    },
+    { id: '#dkpiToday',    fn: () => {
+        // crawled_at 기준 오늘 범위 (API 응답값 활용 → 사이드바와 동일)
+        S.quickPeriod = null;
+        S.crawledFrom = d.todayRange?.from || '';
+        S.crawledTo   = d.todayRange?.to   || '';
+        S.dateFrom=''; S.dateTo='';
+        $$('.chip').forEach(c => c.classList.remove('active'));
+        $('#chipToday')?.classList.add('active');
+        doSearch();
+      }
+    },
+    { id: '#dkpiDisaster', fn: () => {
+        S.category='중대재해';
+        S.quickPeriod=null;
+        S.crawledFrom = d.todayRange?.from || '';
+        S.crawledTo   = d.todayRange?.to   || '';
+        S.dateFrom=''; S.dateTo='';
+        switchTab('disaster'); doSearch();
+      }
+    },
     { id: '#dkpiWeek',     fn: () => { $('#chipWeek')?.click(); } },
   ];
   kpiMap.forEach(({ id, fn }) => {

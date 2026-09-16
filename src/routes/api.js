@@ -14,6 +14,8 @@ const {
   getRecentCrawlLogs,
   getActiveKeywords,
   incrementViewCount,
+  getUTCRangeForKSTDay,
+  getUTCHoursAgo,
   db,
 } = require('../models/database');
 const { runAllCrawlers, getStatus: getSchedulerStatus } = require('../crawlers/scheduler');
@@ -684,41 +686,69 @@ router.get('/stats/region', (req, res) => {
 // GET /api/stats/today-summary
 router.get('/stats/today-summary', (req, res) => {
   try {
-    const todayStr = (() => {
-      const now = new Date();
-      const kst = new Date(now.getTime() + 9 * 3600 * 1000);
+    // ★ 모든 카운트를 crawled_at(수집 일시) 기준으로 통일
+    //   - 좌측 사이드바(/api/stats/dashboard)와 동일한 기준
+    //   - crawled_at은 UTC 저장, KST 오늘/이번주 범위를 UTC로 변환하여 비교
+
+    // KST 오늘 범위 (UTC)
+    const todayRange = getUTCRangeForKSTDay(0);
+
+    // KST 기준 이번 주 시작(월요일) 또는 7일 전 범위
+    // 사이드바의 "이번주" 개념과 동일하게 crawled_at 기준 7일 전 UTC
+    const weekStartUTC = getUTCHoursAgo(7 * 24);   // 7일 전 UTC
+
+    // 전체
+    const totalAll = db.prepare(`SELECT COUNT(*) as cnt FROM articles`).get();
+
+    // 오늘 수집 (crawled_at 기준, KST 오늘)
+    const today = db.prepare(`
+      SELECT COUNT(*) as cnt FROM articles
+      WHERE crawled_at >= ? AND crawled_at <= ?
+    `).get(todayRange.from, todayRange.to);
+
+    // 이번 주 수집 (crawled_at 기준, 최근 7일)
+    const week = db.prepare(`
+      SELECT COUNT(*) as cnt FROM articles
+      WHERE crawled_at >= ?
+    `).get(weekStartUTC);
+
+    // 오늘 중대재해 (crawled_at 기준, KST 오늘)
+    const todayDisaster = db.prepare(`
+      SELECT COUNT(*) as cnt FROM articles
+      WHERE crawled_at >= ? AND crawled_at <= ? AND category = '중대재해'
+    `).get(todayRange.from, todayRange.to);
+
+    // 이번 주 중대재해 (crawled_at 기준, 최근 7일)
+    const weekDisaster = db.prepare(`
+      SELECT COUNT(*) as cnt FROM articles
+      WHERE crawled_at >= ? AND category = '중대재해'
+    `).get(weekStartUTC);
+
+    // 오늘 산업재해·안전 (crawled_at 기준, KST 오늘)
+    const todaySafety = db.prepare(`
+      SELECT COUNT(*) as cnt FROM articles
+      WHERE crawled_at >= ? AND crawled_at <= ? AND category = '산업재해·안전'
+    `).get(todayRange.from, todayRange.to);
+
+    // KST 오늘 날짜 문자열 (클라이언트 디버깅용)
+    const kstDate = (() => {
+      const kst = new Date(Date.now() + 9 * 3600 * 1000);
       return kst.toISOString().substring(0, 10);
     })();
-    const weekAgo = (() => {
-      const d = new Date();
-      d.setDate(d.getDate() - 7);
-      return d.toISOString().substring(0, 10);
-    })();
-    const monthAgo = (() => {
-      const d = new Date();
-      d.setDate(d.getDate() - 30);
-      return d.toISOString().substring(0, 10);
-    })();
-
-    const today = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) = ?`).get(todayStr);
-    const week  = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) >= ?`).get(weekAgo);
-    const month = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) >= ?`).get(monthAgo);
-    const todayDisaster = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) = ? AND category = '중대재해'`).get(todayStr);
-    const weekDisaster  = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) >= ? AND category = '중대재해'`).get(weekAgo);
-    const todaySafety   = db.prepare(`SELECT COUNT(*) as cnt FROM articles WHERE date(published_at) = ? AND category = '산업재해·안전'`).get(todayStr);
-    const totalAll      = db.prepare(`SELECT COUNT(*) as cnt FROM articles`).get();
 
     res.json({
       success: true,
       data: {
         today: today.cnt,
         week: week.cnt,
-        month: month.cnt,
         total: totalAll.cnt,
         todayDisaster: todayDisaster.cnt,
         weekDisaster: weekDisaster.cnt,
         todaySafety: todaySafety.cnt,
-        kstDate: todayStr,
+        kstDate,
+        // 클라이언트 필터 연동용 crawled_at 범위 (dashboard API와 동일 기준)
+        todayRange,
+        weekStartUTC,
       },
     });
   } catch (e) {
