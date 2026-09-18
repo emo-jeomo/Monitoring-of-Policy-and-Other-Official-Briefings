@@ -2044,14 +2044,29 @@ body.sidebar-active {
 .urgent-list {
   list-style:none; margin:0; padding:0;
   display:flex; flex-direction:column; gap:6px;
-  /* ★ flex:1 유지(카드 stretch 대응) + justify-content:flex-start로 상단부터 쌓음
-     space-between 제거: 소수 아이템(1~3건)일 때 카드 상·중·하 균등 배분 → 빈 공간 발생 문제 해결 */
+  /* ★ flex:1 → 카드 stretch 등높이 대응 + 항목들이 남은 공간 균등 분배 */
   flex: 1;
-  justify-content: flex-start;    /* 항목 수 무관하게 상단부터 자연스럽게 쌓임 */
-  align-content: flex-start;      /* 다중 줄 시에도 상단 정렬 */
+  justify-content: flex-start;
+  align-content: flex-start;
+}
+/* ★ JS가 data-expand 속성을 부여하면 항목이 flex:1로 남은 공간을 균등 분배 */
+.urgent-list[data-expand="true"] {
+  justify-content: space-between;  /* 확장 모드: 항목 사이 공간 균등 배분 */
+}
+.urgent-list[data-expand="true"] .urgent-item {
+  flex: 1;                          /* 각 항목이 남은 공간을 균등하게 점유 */
+  justify-content: flex-start;      /* 내용은 항목 상단부터 배치 */
+  padding: 8px 8px;                 /* 여백 확대로 내부 호흡감 */
+}
+.urgent-list[data-expand="true"] .urgent-title-text {
+  -webkit-line-clamp: 2;            /* 확장 시 제목 2줄 표시 */
+  white-space: normal;              /* 줄바꿈 허용 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .urgent-item {
-  /* ★ 아이템 높이 통일: ~36px 기준 */
+  /* ★ 기본: 콘텐츠 높이만큼 차지 */
   padding: 4px 8px; border-radius:6px;
   background:var(--surface-3, var(--navy-50));
   cursor:pointer; transition:background .15s;

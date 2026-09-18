@@ -1863,12 +1863,39 @@ async function loadTrendChart(days) {
 }
 
 // ── 긴급 모니터링 기사 ─────────────────────────────────────────
+// ── 긴급 카드 빈 공간 자동 흡수 ──────────────────────────────
+// 항목 수가 적어 카드에 여백이 생기면 항목을 늘려 공백 없이 채움
+// (loadUrgentList 렌더 직후 + loadNewDashboard 최종 레이아웃 확정 후 2회 호출)
+function urgentAutoExpand() {
+  const el = $('#urgentList');
+  if (!el) return;
+  const items = $$('.urgent-item', el);
+  if (!items.length) { el.removeAttribute('data-expand'); return; }
+
+  // 확장 모드 일시 해제 → 원래 콘텐츠 높이(자연 높이) 측정
+  el.removeAttribute('data-expand');
+
+  requestAnimationFrame(() => {
+    const naturalH = el.scrollHeight;   // 항목들의 자연 높이 합산
+    const cardH    = el.clientHeight;   // 카드가 stretch로 확장된 실제 가용 높이
+    const slack    = cardH - naturalH;  // 남은 여백
+
+    // 여백이 항목 1개 최소 높이(34px) 이상이고 항목이 5개 미만일 때 확장
+    if (slack >= 34 && items.length < 5) {
+      el.setAttribute('data-expand', 'true');
+    } else {
+      el.removeAttribute('data-expand');
+    }
+  });
+}
+
 async function loadUrgentList() {
   const data = await apiFetch('/api/articles/urgent?limit=7');
   const el = $('#urgentList');
   if (!el) return;
   if (!data?.success || !data.data?.length) {
     el.innerHTML = '<li class="urgent-empty"><i class="ti ti-check-circle" style="color:var(--success-400)"></i> 현재 긴급 기사 없음</li>';
+    el.removeAttribute('data-expand');
     return;
   }
   el.innerHTML = data.data.map(a => `
@@ -1880,6 +1907,8 @@ async function loadUrgentList() {
       <p class="urgent-title-text">${a.title}</p>
     </li>`).join('');
   $$('.urgent-item', el).forEach(li => li.addEventListener('click', () => openDrawer(parseInt(li.dataset.id))));
+  // 렌더 직후 1차 확장 검사 (카드 최종 높이 확정 전 예비 측정)
+  requestAnimationFrame(() => requestAnimationFrame(() => urgentAutoExpand()));
 }
 
 // ── 위험 업종별 통계 ──────────────────────────────────────────
@@ -1971,6 +2000,9 @@ async function loadNewDashboard() {
   //    → requestAnimationFrame 2회: 첫 번째는 레이아웃 계산, 두 번째는 실제 픽셀 확정
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   await loadTrendChart(14);
+  // ③ 트렌드 차트 로드 후 하단 카드 최종 높이 확정 → 긴급 카드 확장 여부 재검사
+  //    (업종·지역 카드가 stretch로 높이가 결정되는 시점 이후 측정해야 정확)
+  requestAnimationFrame(() => requestAnimationFrame(() => urgentAutoExpand()));
   $$('.trend-btn').forEach(btn => {
     if (btn._trendBound) return; btn._trendBound = true;
     btn.addEventListener('click', async () => {
@@ -1978,6 +2010,18 @@ async function loadNewDashboard() {
       await loadTrendChart(parseInt(btn.dataset.days));
     });
   });
+}
+
+// ── 긴급 카드 반응형 확장 감지 (창 크기 변경 시 재조정) ──────
+function initUrgentResizeObserver() {
+  const card = $('.dash-card-urgent');
+  if (!card || !window.ResizeObserver) return;
+  let _roTimer;
+  const ro = new ResizeObserver(() => {
+    clearTimeout(_roTimer);
+    _roTimer = setTimeout(() => urgentAutoExpand(), 80); // 디바운스 80ms
+  });
+  ro.observe(card);
 }
 
 // ── 대시보드 토글 ─────────────────────────────────────────────
@@ -2346,6 +2390,7 @@ async function init() {
   initMobileMenu();
   initSearchAutocomplete();
   initDashToggle();
+  initUrgentResizeObserver();   // 창 크기 변경 시 긴급 카드 자동 확장 재조정
 
   await loadDashboard();
   await initYearOpts();
