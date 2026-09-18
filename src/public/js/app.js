@@ -1711,8 +1711,8 @@ async function loadDonutChart() {
   // DPR(Retina) 대응 – breakpoint별 고정 크기 (부모 높이 의존성 제거)
   const dpr = window.devicePixelRatio || 1;
   const iw = window.innerWidth;
-  // ★ CSS와 동기화: 480px→120, 640px→140, 768px→160, 데스크탑→180
-  const canvasSize = iw <= 480 ? 120 : iw <= 640 ? 140 : iw <= 768 ? 160 : 180;
+  // ★ CSS와 동기화: 480px→120, 640px→130, 768px→150, 데스크탑→150 (v1.8)
+  const canvasSize = iw <= 480 ? 120 : iw <= 640 ? 130 : iw <= 768 ? 150 : 150;
   el.width  = canvasSize * dpr;
   el.height = canvasSize * dpr;
   el.style.width  = canvasSize + 'px';
@@ -1784,8 +1784,9 @@ async function loadTrendChart(days) {
   //   clientWidth/Height: 실제 렌더된 px (rAF 2회 후 호출로 레이아웃 확정 보장)
   const displayW = Math.max(wrap?.clientWidth  || 0, 200);
   const stretchH = wrap?.clientHeight ?? 0;
-  // 폴백: stretch 미작동 시 (모바일 세로배치) breakpoint 고정값
-  const fallbackH = iw2 <= 480 ? 90 : iw2 <= 640 ? 110 : iw2 <= 768 ? 160 : 200;
+  // v1.8: height:280px 체계 — 래퍼 clientHeight를 우선 사용, 폴백은 뷰포트별 고정값
+  // (모바일 세로배치에서 height:auto이므로 clientHeight가 0에 가까울 수 있음)
+  const fallbackH = iw2 <= 480 ? 110 : iw2 <= 640 ? 130 : iw2 <= 768 ? 160 : 200;
   const displayH  = stretchH > 40 ? stretchH : fallbackH;
   // canvas 내부 해상도를 DPR 배율로 설정
   el.width  = displayW * dpr;

@@ -510,10 +510,11 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   transition: max-height .25s var(--ease), opacity .2s;
   opacity: 0; pointer-events: none;
 }
-.adv-panel.open { max-height: 100px; opacity: 1; pointer-events: all; }
+/* v1.7: 행 내 정렬로 max-height 축소 */
+.adv-panel.open { max-height: 58px; opacity: 1; pointer-events: all; }
 .adv-panel-inner {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 24px; flex-wrap: wrap;
+  padding: 8px 24px; flex-wrap: nowrap;  /* v1.7: wrap→nowrap, 단일 행 유지 */
 }
 .adv-tabs { display: flex; gap: 3px; }
 .adv-tab {
@@ -530,9 +531,12 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 /* 날짜 입력 필드 래퍼 */
 .adv-date-field {
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: row; align-items: center; gap: 6px;
 }
-.adv-hint { font-size: 9.5px; color: var(--navy-300); padding-left: 2px; }
+.adv-hint {
+  font-size: 9.5px; color: var(--navy-300);
+  white-space: nowrap; flex-shrink: 0;
+}
 
 .adv-input {
   padding: 5px 8px; border-radius: var(--r-sm);
@@ -1735,8 +1739,9 @@ body.sidebar-active {
   /* ★ 필터바 고급날짜 버튼: 아이콘만 표시 */
   .btn-adv-date span { display: none; }
   .btn-adv-date { padding: 5px 8px; min-width: 30px; justify-content: center; }
-  /* ★ 고급날짜 패널 max-height 증가 (5탭+입력+버튼 두 줄 대응) */
-  .adv-panel.open { max-height: 220px; }
+  /* 모바일: 날짜 패널 두 줄 허용 */
+  .adv-panel.open { max-height: 120px; }
+  .adv-panel-inner { flex-wrap: wrap; padding: 6px 14px; gap: 8px; }
   /* 피드/카드 */
   .feed-wrap { padding: 0 14px 30px; }
   .news-grid { grid-template-columns: 1fr; }
@@ -1880,21 +1885,22 @@ body.sidebar-active {
 /* ── 차트 행 ─────────────────────────────────────────────────── */
 .dash-chart-row {
   display: grid;
-  /* ★ 도넛 카드 너비 확대(340px): 범례 텍스트 잘림 방지 + 넓은 공간 확보 */
-  grid-template-columns: 340px 1fr;
+  /* 도넛 300px 고정, 트렌드 카드가 나머지 채움 */
+  grid-template-columns: 300px 1fr;
   gap: 14px;
-  /* ★ stretch: 두 카드 높이 동일하게 맞춤 (start→stretch) */
+  /* ★ v1.8: 명시 height → 내부 flex:1 자식들이 정확히 채움 (max-height 제거) */
+  height: 280px;
   align-items: stretch;
 }
 .dash-card {
   background: var(--surface-2, var(--white));
   border: 1px solid var(--border, var(--navy-100));
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 12px 14px;   /* v1.7: 상하 14→12 */
 }
 .dash-card-head {
   display: flex; align-items:center; justify-content:space-between;
-  margin-bottom: 12px; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 8px; gap: 8px; flex-wrap: wrap; /* v1.7: mb 12→8 */
 }
 .dash-card-title {
   font-size: 13px; font-weight:700;
@@ -1910,14 +1916,16 @@ body.sidebar-active {
 
 /* 도넛 차트 */
 .dash-card-donut {
-  /* ★ flex column: 범례가 남은 공간을 채워서 두 카드 높이 동기화 */
+  /* flex column: 도넛 + 범례 수직 스택 — 총 높이는 .dash-chart-row height가 제어 */
   display: flex; flex-direction: column;
+  overflow: hidden; /* 자식이 공간 벗어나는 것 방지 */
 }
 .donut-wrap {
   display: flex; justify-content:center; align-items:center;
-  position: relative; margin: 8px auto 14px;
-  /* ★ 180px로 확대: 도넛 가독성 향상 */
-  width: 180px; height: 180px;
+  position: relative;
+  margin: 4px auto 6px;
+  flex-shrink: 0; /* 절대 축소 안 됨 → 도넛이 찌그러지지 않음 */
+  width: 150px; height: 150px;
 }
 .donut-wrap canvas { display:block; }
 .donut-center {
@@ -1926,7 +1934,7 @@ body.sidebar-active {
   pointer-events:none; text-align:center;
 }
 .donut-center-val {
-  font-size: 20px; font-weight: 800;
+  font-size: 15px; font-weight: 800;
   color: var(--text-primary, var(--navy-900)); line-height:1.1;
   font-family: var(--font-body);
 }
@@ -1936,16 +1944,18 @@ body.sidebar-active {
 }
 .donut-legend {
   list-style:none; margin:0; padding:0;
-  display:flex; flex-direction:column; gap:5px;
-  /* ★ 남은 공간을 범례가 채움 → 도넛 카드 높이 = 트렌드 카드 높이 */
+  display:flex; flex-direction:column; gap:2px;
   flex: 1;
+  min-height: 0;      /* flex shrink 허용 → 넘쳐도 도넛 밀지 않음 */
   justify-content: center;
+  overflow: hidden;   /* 넘치는 범례 항목 숨김 */
 }
 .donut-legend-item {
-  display:flex; align-items:center; gap:7px;
-  padding: 4px 6px; border-radius:6px;
+  display:flex; align-items:center; gap:6px;
+  padding: 2px 5px; border-radius:5px;
   transition:background .15s; cursor:pointer;
   -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0; /* 아이템이 줄어들어 찌그러지지 않도록 */
 }
 @media (hover: hover) {
   .donut-legend-item:hover { background: var(--surface-3, var(--navy-50)); }
@@ -1966,12 +1976,12 @@ body.sidebar-active {
 
 /* 트렌드 카드 */
 .dash-card-trend {
-  /* ★ flex column: trend-chart-wrap이 남은 공간 100% 채움 */
   display: flex; flex-direction: column;
+  overflow: hidden; /* 자식이 벗어나는 것 차단 */
 }
 
 /* 트렌드 차트 */
-.trend-period-btns { display:flex; gap:4px; flex-wrap:wrap; }
+.trend-period-btns { display:flex; gap:4px; flex-wrap:wrap; flex-shrink: 0; }
 .trend-btn {
   padding: 3px 10px; border-radius:6px;
   border:1px solid var(--border, var(--navy-100));
@@ -1979,8 +1989,7 @@ body.sidebar-active {
   color:var(--text-muted, var(--navy-400));
   font-size:11px; cursor:pointer; transition:all .15s;
   font-family: var(--font-body);
-  /* 모바일 터치 */
-  min-height: 28px;
+  min-height: 26px;
   -webkit-tap-highlight-color: transparent;
 }
 @media (hover: hover) {
@@ -1991,19 +2000,17 @@ body.sidebar-active {
   color:#fff; border-color:var(--accent-main, var(--navy-500));
 }
 .trend-chart-wrap {
-  overflow:hidden; border-radius:6px; margin-top:8px;
-  /* ★ flex:1 → 카드 내 남은 세로 공간 전부 차지 (도넛 카드와 높이 동기화) */
+  overflow: hidden; border-radius:6px; margin-top:6px;
+  /* ★ flex:1 + min-height:0 → 남은 공간 정확히 채우고 부모 height 엿보지 않음 */
   flex: 1;
-  min-height: 160px;
-  /* canvas를 래퍼 높이 100%로 늘리기 */
+  min-height: 0;
   display: flex; flex-direction: column;
 }
 .trend-chart-wrap canvas {
-  display:block;
-  /* ★ flex:1 → 래퍼 높이를 canvas가 가득 채움 */
+  display: block;
   flex: 1;
-  width: 100%;
   min-height: 0;
+  width: 100%;
 }
 
 /* ── 하단 행 ─────────────────────────────────────────────────── */
@@ -2279,9 +2286,8 @@ body.sidebar-active {
 /* 1100px 이하: KPI 4열 유지, 차트 비율 조정, 하단 2열 */
 @media (max-width: 1100px) {
   .dash-kpi-row      { gap: 10px; }
-  /* ★ 1100px 이하: 도넛 너비 320px 유지 */
-  .dash-chart-row    { grid-template-columns: 320px 1fr; gap: 12px; }
-  .donut-wrap        { margin: 6px auto 12px; }
+  .dash-chart-row    { grid-template-columns: 280px 1fr; gap: 12px; height: 260px; }
+  .donut-wrap        { width: 140px; height: 140px; }
   .dash-bottom-row   { grid-template-columns: 1fr 1fr; }
 }
 
@@ -2298,23 +2304,27 @@ body.sidebar-active {
   .dash-kpi-card   { padding: 10px 12px; gap: 8px; }
   .kpi-val         { font-size: 20px; }
   .kpi-icon        { width: 38px; height: 38px; font-size: 18px; }
-  /* ★ 768px: 차트 세로 배치 → stretch 대신 start(도넛/트렌드 각자 돉립 높이) */
-  .dash-chart-row  { grid-template-columns: 1fr; gap: 10px; align-items: start; }
+  /* ★ 768px: 차트 세로 배치 — height 해제하고 각각 독립 auto 높이 */
+  .dash-chart-row  {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: start;
+    height: auto; /* 세로 배치이므로 고정 height 해제 */
+  }
   .dash-bottom-row { grid-template-columns: 1fr; }
   .dash-card       { padding: 12px 14px; }
   .dash-toggle-btn { width: calc(100% - 20px); margin: 0 10px; }
-  /* ★ 768px: 세로베치이므로 트렌드카드 flex 해제, 고정 높이로 */
-  .dash-card-trend { display: block; }
-  .trend-chart-wrap { flex: none; min-height: 160px; display: block; }
-  .trend-chart-wrap canvas { flex: none; width: 100% !important; height: 160px !important; }
-  /* 도넛: 가로 배치 (차트 + 범례 나란히) — 너비 제한 없이 펼침 */
+  /* 768px: 트렌드 카드 고정 높이 */
+  .dash-card-trend { display: flex; flex-direction: column; overflow: hidden; }
+  .trend-chart-wrap { flex: none; height: 160px; min-height: 0; display: flex; flex-direction: column; }
+  .trend-chart-wrap canvas { flex: 1; min-height: 0; width: 100% !important; height: auto !important; }
+  /* 도넛: 가로 배치 (차트 + 범례 나란히) */
   .dash-card-donut {
-    display: flex; flex-direction: row; align-items: flex-start;
-    gap: 16px; flex-wrap: nowrap;
+    display: flex; flex-direction: row; align-items: center;
+    gap: 16px; flex-wrap: nowrap; overflow: hidden;
   }
-  .donut-legend { flex: none; justify-content: flex-start; } /* stretch 연승 해제 */
-  .donut-wrap { margin: 0; flex-shrink: 0; width: 160px; height: 160px; }
-  .donut-legend { flex: 1; min-width: 130px; }
+  .donut-wrap { margin: 0; flex-shrink: 0; width: 150px; height: 150px; }
+  .donut-legend { flex: 1; min-width: 120px; min-height: 0; overflow: hidden; justify-content: flex-start; }
 }
 
 /* 640px 이하: KPI 2열 유지하되 compact */
@@ -2329,11 +2339,11 @@ body.sidebar-active {
   .dash-toggle-btn { width: calc(100% - 16px); margin: 0 8px; font-size: 11px; }
   /* 하다행 긴급/업종/지역 간격 */
   .dash-bottom-row { gap: 8px; }
-  /* ★ 640px: 트렌드 고정 높이 */
-  .trend-chart-wrap { flex: none; min-height: 110px; display: block; }
-  .trend-chart-wrap canvas { flex: none; width: 100% !important; height: 110px !important; }
-  /* 도넛 크기 축소 */
-  .donut-wrap { width: 140px; height: 140px; }
+  /* 640px: 트렌드 고정 높이 */
+  .dash-chart-row { height: auto; }
+  .trend-chart-wrap { flex: none; height: 130px; min-height: 0; display: flex; flex-direction: column; }
+  .trend-chart-wrap canvas { flex: 1; min-height: 0; width: 100% !important; height: auto !important; }
+  .donut-wrap { width: 130px; height: 130px; }
 }
 
 /* 480px 이하: 가장 좁은 화면 */
@@ -2351,13 +2361,14 @@ body.sidebar-active {
   .dash-card-donut {
     flex-direction: column; align-items: center;
   }
-  .donut-wrap { margin: 0 auto 8px; width: 120px; height: 120px; }
+  .donut-wrap { margin: 0 auto 6px; width: 120px; height: 120px; }
   #donutChart { width: 120px !important; height: 120px !important; }
-  .donut-legend { width: 100%; }
+  .donut-legend { width: 100%; overflow: hidden; min-height: 0; }
   .donut-name { font-size: 11px; }
-  /* ★ 480px: 트렌드 고정 높이 */
-  .trend-chart-wrap { flex: none; min-height: 90px; display: block; }
-  .trend-chart-wrap canvas { flex: none; width: 100% !important; height: 90px !important; }
+  /* 480px: 트렌드 고정 높이 */
+  .dash-chart-row { height: auto; }
+  .trend-chart-wrap { flex: none; height: 110px; min-height: 0; display: flex; flex-direction: column; }
+  .trend-chart-wrap canvas { flex: 1; min-height: 0; width: 100% !important; height: auto !important; }
   .trend-btn  { padding: 2px 7px; font-size: 10px; }
   .dash-toggle-btn { font-size: 10.5px; padding: 6px 0; }
   /* 긴급/업종/지역 카드 폰트 축소 */
