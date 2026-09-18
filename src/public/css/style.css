@@ -2031,6 +2031,8 @@ body.sidebar-active {
   display: flex;
   flex-direction: column;
 }
+/* ★ 업종·지역 카드는 flex:1(항목수 많아 space-between 적합),
+   긴급 카드만 콘텐츠 높이 기반 — 카드 자체는 stretch로 등높이 유지 */
 .dash-card-urgent { border-left: 3px solid #ef4444; }
 .urgent-title { color: #ef4444 !important; }
 .urgent-blink-dot {
@@ -2041,10 +2043,12 @@ body.sidebar-active {
 @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:.2; } }
 .urgent-list {
   list-style:none; margin:0; padding:0;
-  display:flex; flex-direction:column; gap:4px;
-  /* ★ 카드 내 남은 공간 채움 → 3개 카드 높이 동기화 */
+  display:flex; flex-direction:column; gap:6px;
+  /* ★ flex:1 유지(카드 stretch 대응) + justify-content:flex-start로 상단부터 쌓음
+     space-between 제거: 소수 아이템(1~3건)일 때 카드 상·중·하 균등 배분 → 빈 공간 발생 문제 해결 */
   flex: 1;
-  justify-content: space-between;
+  justify-content: flex-start;    /* 항목 수 무관하게 상단부터 자연스럽게 쌓임 */
+  align-content: flex-start;      /* 다중 줄 시에도 상단 정렬 */
 }
 .urgent-item {
   /* ★ 아이템 높이 통일: ~36px 기준 */
