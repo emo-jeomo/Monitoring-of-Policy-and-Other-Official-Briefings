@@ -1865,28 +1865,41 @@ async function loadTrendChart(days) {
 // ── 긴급 모니터링 기사 ─────────────────────────────────────────
 // ── 긴급 카드 빈 공간 자동 흡수 ──────────────────────────────
 // 항목 수가 적어 카드에 여백이 생기면 항목을 늘려 공백 없이 채움
-// (loadUrgentList 렌더 직후 + loadNewDashboard 최종 레이아웃 확정 후 2회 호출)
+// 핵심: ul(flex:1)의 clientHeight는 카드 전체 높이를 이미 채우고 있어 측정 불가
+//       → 부모 카드(.dash-card-urgent)의 내부 가용 높이와 항목 scrollHeight를 비교
 function urgentAutoExpand() {
-  const el = $('#urgentList');
+  const el   = $('#urgentList');
   if (!el) return;
   const items = $$('.urgent-item', el);
   if (!items.length) { el.removeAttribute('data-expand'); return; }
 
-  // 확장 모드 일시 해제 → 원래 콘텐츠 높이(자연 높이) 측정
+  // ① 확장 모드 해제 → ul이 자연 높이로 수축하도록
   el.removeAttribute('data-expand');
+  // flex:1 임시 제거로 ul이 콘텐츠 높이만 차지하도록 강제
+  el.style.flex = 'none';
 
-  requestAnimationFrame(() => {
-    const naturalH = el.scrollHeight;   // 항목들의 자연 높이 합산
-    const cardH    = el.clientHeight;   // 카드가 stretch로 확장된 실제 가용 높이
-    const slack    = cardH - naturalH;  // 남은 여백
+  // ② 레이아웃 재계산 후 측정 (2 rAF: 첫번째=스타일 적용, 두번째=픽셀 확정)
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const card     = el.closest('.dash-card-urgent');
+    const cardHead = card?.querySelector('.dash-card-head');
 
-    // 여백이 항목 1개 최소 높이(34px) 이상이고 항목이 5개 미만일 때 확장
+    // 카드 내부 가용 높이 = 카드 clientHeight - padding(top+bottom=24) - 헤더 높이 - 헤더 mb(8)
+    const cardInnerH = card
+      ? card.clientHeight - 24 - (cardHead ? cardHead.offsetHeight + 8 : 0)
+      : 0;
+    const naturalH   = el.scrollHeight;   // 항목들의 실제 콘텐츠 높이
+    const slack      = cardInnerH - naturalH;
+
+    // ③ flex:1 복원
+    el.style.flex = '';
+
+    // 여백 ≥ 34px(항목 1개 최소 높이)이고 항목이 5개 미만일 때 확장
     if (slack >= 34 && items.length < 5) {
       el.setAttribute('data-expand', 'true');
     } else {
       el.removeAttribute('data-expand');
     }
-  });
+  }));
 }
 
 async function loadUrgentList() {
